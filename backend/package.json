@@ -11,7 +11,7 @@
 	"dependencies": {
 		"chanfana": "^2.0.2",
 		"cloudflare-workers-openapi": "file:",
-		"hono": "^4.4.7",
+		"hono": "^4.7.7",
 		"zod": "^3.23.8"
 	},
 	"devDependencies": {
