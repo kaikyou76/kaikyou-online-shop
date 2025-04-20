@@ -1,9 +1,12 @@
 import { fromHono } from "chanfana";
 import { Hono } from "hono";
-import { TaskCreate } from "./endpoints/taskCreate";
-import { TaskDelete } from "./endpoints/taskDelete";
-import { TaskFetch } from "./endpoints/taskFetch";
-import { TaskList } from "./endpoints/taskList";
+import { TaskCreate } from "endpoints/taskCreate";
+import { TaskDelete } from "endpoints/taskDelete";
+import { TaskFetch } from "endpoints/taskFetch";
+import { TaskList } from "endpoints/taskList";
+import productPostRoute from "endpoints/productCreate";
+import productGetRoute from "endpoints/productGet";
+
 
 type Bindings = {
   DB: D1Database;
@@ -33,21 +36,15 @@ const openapi = fromHono(app, {
   docs_url: "/",
 });
 
+// 商品関連API（/products を含むため /apiにマウント）
+openapi.route("api",productPostRoute);
+openapi.route("api",productGetRoute);
 // OpenAPI経由で登録するルート
 openapi.get("/api/tasks", TaskList);
 openapi.post("/api/tasks", TaskCreate);
 openapi.get("/api/tasks/:taskSlug", TaskFetch);
 openapi.delete("/api/tasks/:taskSlug", TaskDelete);
 
-// 基本ルート（D1 Database接続例）
-app.get('/api/products', async (c) => {
-  try {
-    const { results } = await c.env.DB.prepare('SELECT * FROM products').all();
-    return c.json(results);
-  } catch (error) {
-    console.error('Error fetching products:', error);
-    return c.json({ error: 'サーバーエラーが発生しました' }, 500);
-  }
-});
+
 
 export default app;

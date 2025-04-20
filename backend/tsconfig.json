@@ -2,7 +2,10 @@
 	"compilerOptions": {
 		"allowJs": true,
 		"allowSyntheticDefaultImports": true,
-		"baseUrl": "src",
+		"baseUrl": "./src",
+		"paths": {
+		  "endpoints/*": ["endpoints/*"]
+		},
 		"declaration": true,
 		"sourceMap": true,
 		"esModuleInterop": true,
@@ -14,11 +17,11 @@
 		"noFallthroughCasesInSwitch": true,
 		"pretty": true,
 		"resolveJsonModule": true,
-		"rootDir": ".",
+		"rootDir": "./src",
 		"skipLibCheck": true,
 		"strict": false,
 		"traceResolution": false,
-		"outDir": "",
+		"outDir": "./dist",
 		"target": "esnext",
 		"module": "esnext",
 		"types": [
