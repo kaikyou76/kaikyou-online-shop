@@ -1,0 +1,14 @@
+name = "backend-production" # 環境名を明示
+main = "src/index.ts"
+compatibility_date = "2025-04-18"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "shopping-db-prod" # 本番用DB名
+database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" # 本番用DB ID
+
+[vars]
+JWT_SECRET = "{{ JWT_SECRET_PRODUCTION }}" # シークレット設定
+JWT_ISSUER = "kaikyou-shop"
+JWT_AUDIENCE = "kaikyou-shop-users"
+ENVIRONMENT = "production"

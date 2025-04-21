@@ -1,39 +1,73 @@
-// backend/src/types.ts
-export interface Bindings {
+// =====================
+// Cloudflare 環境変数 & Bindings
+// =====================
+export interface Env {
 	DB: D1Database;
+	JWT_SECRET: string;
+	JWT_ISSUER: string;
+	JWT_AUDIENCE: string;
+	ENVIRONMENT: 'development' | 'production' | 'staging';
   }
   
-  // 商品基本型
-  export interface Product {
-	id: number;
-	name: string;
-	price: number;
-	image_url?: string;
-  }
+  // 後方互換性のために Bindings も保持
+  export interface Bindings extends Env {}
   
-  // カートアイテム型（DB構造 + 計算フィールド）
-  export interface CartItem extends Product {
-	quantity: number;
-	subtotal: number; // 追加計算フィールド
-  }
-  
-  // JWTペイロード型
+  // =====================
+  // 認証関連タイプ
+  // =====================
   export interface JwtPayload {
 	user_id: number;
 	email: string;
-	exp?: number;
+	exp: number;
+	iat?: number;
+	iss?: string;
+	aud?: string | string[];
   }
   
-  // エラーレスポンス型
+  // =====================
+  // データベースエンティティ
+  // =====================
+  export interface CartItem {
+	id: number;
+	product_id: number;
+	user_id: number | null;
+	session_id: string | null;
+	quantity: number;
+	created_at: string;
+	
+	// APIレスポンス用計算フィールド
+	subtotal?: number;
+	name?: string;
+	price?: number;
+	image_url?: string;
+  }
+  
+  // =====================
+  // API レスポンスタイプ
+  // =====================
   export interface ErrorResponse {
 	error: {
 	  message: string;
-	  details?: Record<string, unknown>;
+	  details?: Record<string, unknown> | string;
+	  solution?: string;
 	};
   }
   
-  // APIレスポンス型（成功/失敗共用）
-  export type ApiResponse<T> = 
-	| { data: T; success: true }
-	| { error: string; details?: unknown; success: false };
+  export interface SuccessResponse<T = unknown> {
+	data: T;
+	meta?: {
+	  page?: number;
+	  per_page?: number;
+	  total?: number;
+	};
+  }
+  
+  // =====================
+  // Hono 型拡張
+  // =====================
+  declare module 'hono' {
+	interface ContextVariableMap {
+	  jwtPayload?: JwtPayload;  // 認証オプショナルに統一
+	}
+  }
   

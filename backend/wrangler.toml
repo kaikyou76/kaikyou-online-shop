@@ -1,0 +1,14 @@
+name = "backend-dev"  # 開発環境であることを明示
+main = "src/index.ts"
+compatibility_date = "2025-04-18"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "shopping-db"
+database_id = "f48c6205-4a37-4438-811e-1cb0d57c0e6d"
+
+[vars]
+JWT_SECRET = "local_dev_secret"
+JWT_ISSUER = "kaikyou-shop-dev"
+JWT_AUDIENCE = "kaikyou-shop-users-dev"
+ENVIRONMENT = "development"

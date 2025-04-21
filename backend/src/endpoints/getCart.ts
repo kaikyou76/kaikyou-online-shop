@@ -1,9 +1,5 @@
-// backend/src/endpoints/getCart.ts
 import { Context } from 'hono';
-import { Bindings, CartItem, ErrorResponse, JwtPayload } from 'types';
-
-// レスポンス型の厳密な定義
-type CartResponse = CartItem[] | ErrorResponse;
+import { Bindings, CartItem, ErrorResponse, JwtPayload } from '../types';
 
 export const getCartHandler = async (
   c: Context<{ 
@@ -11,97 +7,102 @@ export const getCartHandler = async (
     Variables: { jwtPayload?: JwtPayload } 
   }>
 ): Promise<Response> => {
-  // 認証情報の型安全な取得
   const payload = c.get('jwtPayload');
   const user_id = payload?.user_id;
   const sessionId = c.req.header('x-session-id');
 
-  // バリデーション（ErrorResponse型に準拠）
+  // バリデーション
   if (!user_id && !sessionId) {
-    return c.json(
-      { 
-        error: { 
-          message: 'セッションIDまたは認証が必要です',
-          details: { 
-            required: ['x-session-id', 'jwt'],
-            received: { hasSessionId: !!sessionId, hasJWT: !!user_id }
-          } 
-        } 
-      } satisfies ErrorResponse,
-      400
-    );
+    return c.json({
+      error: { 
+        message: 'セッションIDまたは認証が必要です',
+        details: { 
+          required: ['x-session-id', 'jwt'],
+          received: { hasSessionId: !!sessionId, hasJWT: !!user_id }
+        },
+        solution: '認証トークンを提供するか、セッションIDをヘッダーに含めてください'
+      }
+    } satisfies ErrorResponse, 400);
   }
 
   try {
-    // 型安全なクエリ構築
-    const whereClause = user_id ? 'ci.user_id = ?' : 'ci.session_id = ?';
-    const mergeClause = user_id && sessionId ? 'OR ci.session_id = ?' : '';
-    const query = `
+    // クエリ構築
+    const conditions = [];
+    const binds = [];
+    
+    if (user_id) {
+      conditions.push('ci.user_id = ?');
+      binds.push(user_id);
+    }
+    
+    if (sessionId) {
+      conditions.push('ci.session_id = ?');
+      binds.push(sessionId);
+    }
+
+    const { results } = await c.env.DB.prepare(`
       SELECT 
-        p.id, p.name, p.price, p.image_url,
+        ci.id,
+        p.id as product_id,
+        p.name,
+        p.price,
+        p.image_url,
         ci.quantity,
         (p.price * ci.quantity) as subtotal
       FROM cart_items ci
       JOIN products p ON ci.product_id = p.id
-      WHERE ${whereClause} ${mergeClause}
-    `;
+      WHERE ${conditions.join(' OR ')}
+    `).bind(...binds).all<CartItem>();
 
-    // 動的バインディング
-    const binds = user_id ? [user_id] : [sessionId as string | number];
-    if (user_id && sessionId) binds.push(sessionId);
-
-    // 型付きクエリ実行
-    const { results } = await c.env.DB.prepare(query)
-      .bind(...binds)
-      .all<CartItem>();
-
-    // カート統合ロジック
+    // カート統合（ユーザーIDとセッションIDの両方がある場合）
     if (user_id && sessionId) {
       await mergeCarts(c.env.DB, user_id, sessionId);
     }
 
-    return c.json(results satisfies CartItem[]);
+    return c.json(results);
   } catch (error) {
     console.error('カート取得エラー:', error);
-    return c.json(
-      { 
-        error: { 
-          message: 'サーバー内部エラー',
-          details: process.env.NODE_ENV === 'development' 
-            ? { error: error instanceof Error ? error.message : String(error) } 
-            : undefined 
-        } 
-      } satisfies ErrorResponse,
-      500
-    );
+    return c.json({
+      error: { 
+        message: 'サーバー内部エラー',
+        ...(c.env.ENVIRONMENT === 'development' && {
+          details: error instanceof Error ? error.message : String(error)
+        })
+      }
+    } satisfies ErrorResponse, 500);
   }
 };
 
-// カート統合関数（型安全に分離）
-const mergeCarts = async (
-  db: D1Database,
-  user_id: number,
-  session_id: string
-): Promise<void> => {
+// カート統合関数
+async function mergeCarts(db: D1Database, user_id: number, session_id: string): Promise<void> {
   try {
     await db.batch([
+      // セッションカートをユーザーカートに移動
       db.prepare(`
         UPDATE cart_items 
         SET user_id = ?, session_id = NULL 
-        WHERE session_id = ?
+        WHERE session_id = ? AND user_id IS NULL
       `).bind(user_id, session_id),
       
+      // 重複アイテムの削除
       db.prepare(`
         DELETE FROM cart_items 
-        WHERE rowid NOT IN (
-          SELECT MIN(rowid)
-          FROM cart_items
-          GROUP BY COALESCE(user_id, -1), product_id
+        WHERE id IN (
+          SELECT ci.id
+          FROM cart_items ci
+          JOIN (
+            SELECT product_id, MIN(id) as min_id
+            FROM cart_items
+            WHERE user_id = ?
+            GROUP BY product_id
+            HAVING COUNT(*) > 1
+          ) dup ON ci.product_id = dup.product_id AND ci.id != dup.min_id
+          WHERE ci.user_id = ?
         )
-      `)
+      `).bind(user_id, user_id)
     ]);
   } catch (error) {
     console.error('カート統合エラー:', error);
     throw new Error('カートの統合に失敗しました');
   }
-};
+}
