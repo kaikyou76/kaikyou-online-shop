@@ -1,5 +1,5 @@
 {
-	"name": "cloudflare-workers-openapi",
+	"name": "kaikyou-shop-backend",
 	"version": "0.0.1",
 	"private": true,
 	"scripts": {
@@ -9,8 +9,9 @@
 		"cf-typegen": "wrangler types"
 	},
 	"dependencies": {
-		"cloudflare-workers-openapi": "file:",
+		"dotenv": "^16.5.0",
 		"hono": "^4.7.7",
+		"jose": "^6.0.10",
 		"zod": "^3.23.8"
 	},
 	"devDependencies": {
