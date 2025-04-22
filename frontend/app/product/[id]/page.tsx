@@ -9,9 +9,10 @@ type Product = {
 
 async function getProduct(id: string): Promise<Product | null> {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/products`);
-    const products: Product[] = await res.json();
-    return products.find((p) => String(p.id) === id) || null;
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/products/${id}`);
+    if (!res.ok) return null;
+    const product: Product = await res.json();
+    return product;
   } catch (error) {
     console.error('商品取得エラー:', error);
     return null;
@@ -39,5 +40,3 @@ export default async function ProductDetail({ params }: Props) {
     </div>
   );
 }
-
-
