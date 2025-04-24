@@ -1,3 +1,6 @@
+import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
+import { z } from "zod";
+import { productSchema } from "../schemas/product";
 /**
  * Cloudflare Worker にバインドされる環境変数
  * （wrangler.toml の [vars] や D1データベースなど）
@@ -8,6 +11,8 @@ export interface Env {
   JWT_ISSUER: string;
   JWT_AUDIENCE: string;
   ENVIRONMENT: "development" | "production" | "staging";
+  R2_BUCKET: R2Bucket;
+  R2_PUBLIC_DOMAIN: string;
 }
 
 /**
@@ -60,8 +65,13 @@ export interface CartItem {
  */
 export interface ErrorResponse {
   error: {
+    code: string;
     message: string;
-    details?: Record<string, unknown> | string;
+    details?: z.typeToFlattenedError<z.infer<typeof productSchema>>; // 具体的なスキーマ型を使用
+    issues?: Array<{
+      path: (string | number)[];
+      message: string;
+    }>;
     solution?: string;
   };
 }
@@ -86,4 +96,25 @@ declare module "hono" {
   interface ContextVariableMap {
     jwtPayload?: JwtPayload; // 認証オプショナルに統一
   }
+}
+
+// ストレージ関連の型（必要に応じて拡張）
+export interface StorageConfig {
+  folder?: string;
+  maxFileSize?: number;
+}
+
+export interface ProductCreateResponse {
+  success: boolean;
+  data: {
+    id: number;
+    name: string;
+    price: number;
+    stock: number;
+    images: {
+      main: string;
+      additional: string[];
+    };
+    createdAt: string;
+  };
 }

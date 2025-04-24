@@ -1,36 +1,129 @@
-import { z } from "zod";
 import { Context } from "hono";
+import { Bindings, ErrorResponse, ProductCreateResponse } from "types/types";
+import { productSchema } from "schemas/product";
+import { uploadToR2 } from "lib/storage";
 
-type Bindings = {
-  DB: D1Database;
-};
-export const productPostHandler = async (c: Context<{ Bindings: Bindings }>) => {
-  const bodySchema = z.object({
-    name: z.string().min(1, "商品名は必須です"),
-    description: z.string().optional(),
-    price: z.number().positive("正の値を指定してください"),
-    stock: z.number().int().nonnegative().default(0),
-    category_id: z.number().int().optional(),
-    image_url: z.string().url("有効なURLを指定してください").optional(),
-  }).strict();
-
+export const productPostHandler = async (
+  c: Context<{ Bindings: Bindings }>
+): Promise<Response> => {
   try {
-    const validated = bodySchema.safeParse(await c.req.json());
-    if (!validated.success) {
-      return c.json({ error: validated.error.flatten() }, 400);
+    const formData = await c.req.formData();
+
+    // フォームデータの前処理
+    const rawFormData = {
+      name: formData.get("name"),
+      description: formData.get("description"),
+      price: formData.get("price"),
+      stock: formData.get("stock") || 0,
+      category_id: formData.get("category_id"),
+    };
+
+    // バリデーション
+    const validationResult = productSchema.safeParse(rawFormData);
+    if (!validationResult.success) {
+      return c.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "入力内容に誤りがあります",
+            details: validationResult.error.flatten(),
+          },
+        } satisfies ErrorResponse,
+        400
+      );
     }
 
-    const { name, description, price, image_url, stock, category_id } = validated.data;
-    const result = await c.env.DB.prepare(`
-      INSERT INTO products 
-        (name, description, price, image_url, stock, category_id)
-      VALUES (?, ?, ?, ?, ?, ?)
-      RETURNING id, name, price, stock;
-    `).bind(name, description, price, image_url, stock, category_id).first();
+    // 画像処理
+    const mainImageFile = formData.get("mainImage") as File | null;
+    const additionalImageFiles = formData.getAll("additionalImages") as File[];
 
-    return c.json(result, 201);
+    if (!mainImageFile?.size) {
+      return c.json(
+        {
+          error: {
+            code: "MISSING_MAIN_IMAGE",
+            message: "メイン画像が必須です",
+          },
+        } satisfies ErrorResponse,
+        400
+      );
+    }
+
+    // R2アップロード
+    const [mainImage, additionalImages] = await Promise.all([
+      uploadToR2(c.env.R2_BUCKET, mainImageFile, c.env.R2_PUBLIC_DOMAIN, {
+        folder: "products/main",
+      }),
+      Promise.all(
+        additionalImageFiles
+          .filter((file) => file.size > 0)
+          .map((file) =>
+            uploadToR2(c.env.R2_BUCKET, file, c.env.R2_PUBLIC_DOMAIN, {
+              folder: "products/additional",
+            })
+          )
+      ),
+    ]);
+
+    // DB操作
+    const productInsert = await c.env.DB.prepare(
+      `INSERT INTO products (
+          name, description, price, stock, category_id, 
+          main_image_url, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id;`
+    )
+      .bind(
+        validationResult.data.name,
+        validationResult.data.description,
+        validationResult.data.price,
+        validationResult.data.stock,
+        validationResult.data.category_id,
+        mainImage.url,
+        new Date().toISOString()
+      )
+      .first<{ id: number }>();
+
+    // 追加画像登録
+    if (additionalImages.length > 0) {
+      await c.env.DB.batch(
+        additionalImages.map((img) =>
+          c.env.DB.prepare(
+            `INSERT INTO product_images (
+                product_id, image_url, created_at
+              ) VALUES (?, ?, ?)`
+          ).bind(productInsert.id, img.url, new Date().toISOString())
+        )
+      );
+    }
+
+    // レスポンス
+    return c.json(
+      {
+        success: true,
+        data: {
+          id: productInsert.id,
+          name: validationResult.data.name,
+          price: validationResult.data.price,
+          stock: validationResult.data.stock, // 追加
+          images: {
+            main: mainImage.url,
+            additional: additionalImages.map((img) => img.url),
+          },
+          createdAt: new Date().toISOString(), // 追加
+        },
+      } satisfies ProductCreateResponse,
+      201
+    );
   } catch (error) {
-    console.error("商品登録失敗:", error);
-    return c.json({ error: "商品登録に失敗しました" }, 500);
+    console.error("Error:", error);
+    return c.json(
+      {
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "処理に失敗しました",
+        },
+      } satisfies ErrorResponse,
+      500
+    );
   }
 };

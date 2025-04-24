@@ -9,6 +9,7 @@
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
+    "@paralleldrive/cuid2": "^2.2.2",
     "hono": "^4.7.7",
     "jose": "^6.0.10",
     "kaikyou-shop-backend": "file:",
