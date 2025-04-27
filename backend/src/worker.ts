@@ -1,31 +1,25 @@
 import app from "routes/index";
-import type { Bindings, Variables } from "types/types";
+import type { Env } from "types/types";
 
-export interface Env extends Bindings {
-  // Cloudflare環境用の追加バインドが必要な場合ここに定義
-}
-
-export default {
+const worker: ExportedHandler<Env> = {
+  // 通常のリクエスト処理（GET/POST など）
   async fetch(
     request: Request,
     env: Env,
     ctx: ExecutionContext
   ): Promise<Response> {
-    // 本番/開発環境の切り替え
-    if (process.env.NODE_ENV === "production") {
-      env.ENVIRONMENT = "production";
-    }
-
-    // Honoアプリケーションに処理を委譲
     return app.fetch(request, env, ctx);
   },
 
-  // Scheduledイベントが必要な場合
+  // Scheduled イベントが必要な場合（例: cron バッチ処理）
   async scheduled(
     event: ScheduledEvent,
     env: Env,
     ctx: ExecutionContext
   ): Promise<void> {
-    // バッチ処理などを実装
+    // ここに定期実行タスクなどを実装可能
+    // 例: データの自動バックアップ、キャッシュのクリアなど
   },
-} satisfies ExportedHandler<Env>;
+};
+
+export default worker;
