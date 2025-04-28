@@ -1,3 +1,4 @@
+//backend/src/routes/index.ts
 import { Hono } from "hono";
 import { productPostHandler } from "endpoints/productCreate";
 import { productGetHandler } from "endpoints/productGet";

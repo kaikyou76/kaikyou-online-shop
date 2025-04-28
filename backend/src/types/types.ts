@@ -1,6 +1,11 @@
+//backend/src/types/types.ts
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { z } from "zod";
 import { productSchema } from "../schemas/product";
+
+//エラーコードを定義
+export const INVALID_SESSION = "INVALID_SESSION";
+
 /**
  * Cloudflare Worker にバインドされる環境変数
  * （wrangler.toml の [vars] や D1データベースなど）
@@ -67,7 +72,13 @@ export interface ErrorResponse {
   error: {
     code: string;
     message: string;
-    details?: z.typeToFlattenedError<z.infer<typeof productSchema>>; // 具体的なスキーマ型を使用
+    details?: z.typeToFlattenedError<z.infer<typeof productSchema>>; // Zodエラー
+    meta?: {
+      // 独自の情報
+      errorMessage?: string;
+      required?: string[];
+      received?: Record<string, boolean>;
+    };
     issues?: Array<{
       path: (string | number)[];
       message: string;

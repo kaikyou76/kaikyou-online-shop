@@ -1,3 +1,4 @@
+//backend/src/schemas/product.ts
 import { z } from "zod";
 
 export const productSchema = z

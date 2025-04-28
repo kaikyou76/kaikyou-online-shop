@@ -1,3 +1,4 @@
+//backend/src/endpoints/productCreate.ts
 import { Context } from "hono";
 import { Bindings, ErrorResponse, ProductCreateResponse } from "types/types";
 import { productSchema } from "schemas/product";

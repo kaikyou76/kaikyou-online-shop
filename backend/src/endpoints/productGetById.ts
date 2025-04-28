@@ -1,10 +1,13 @@
+//backend/src/endpoints/productGet.ts
 import { Context } from "hono";
 
 type Bindings = {
   DB: D1Database;
 };
 
-export const productGetByIdHandler = async (c: Context<{ Bindings: Bindings }>) => {
+export const productGetByIdHandler = async (
+  c: Context<{ Bindings: Bindings }>
+) => {
   const id = c.req.param("id");
 
   try {
