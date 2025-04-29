@@ -9,12 +9,14 @@ type Product = {
 
 async function getProduct(id: string): Promise<Product | null> {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/products/${id}`);
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/products/${id}`
+    );
     if (!res.ok) return null;
     const product: Product = await res.json();
     return product;
   } catch (error) {
-    console.error('商品取得エラー:', error);
+    console.error("商品取得エラー:", error);
     return null;
   }
 }
@@ -27,16 +29,31 @@ export default async function ProductDetail({ params }: Props) {
   const product = await getProduct(params.id);
 
   if (!product) {
-    return <p>商品が見つかりませんでした。</p>;
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-gray-100 p-6">
+        <p className="text-gray-600 text-lg">商品が見つかりませんでした。</p>
+      </div>
+    );
   }
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">{product.name}</h1>
-      <img src={product.image_url} alt={product.name} className="mb-4 w-48" />
-      <p className="mb-2">価格: ¥{product.price}</p>
-      <p className="mb-2">在庫: {product.stock}個</p>
-      <p className="text-gray-700">{product.description}</p>
+    <div className="flex justify-center items-center min-h-screen bg-gray-100 p-6">
+      <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+        <img
+          src={product.image_url}
+          alt={product.name}
+          className="w-full h-64 object-cover rounded-md mb-6"
+        />
+        <h1 className="text-3xl font-bold mb-4 text-gray-800">
+          {product.name}
+        </h1>
+        <p className="text-xl text-green-600 mb-2">¥{product.price}</p>
+        <p className="text-gray-700 mb-4">在庫: {product.stock}個</p>
+        <p className="text-gray-600 mb-6">{product.description}</p>
+        <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded w-full">
+          カートに追加
+        </button>
+      </div>
     </div>
   );
 }
