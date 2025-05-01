@@ -1,3 +1,4 @@
+//backend/src/lib/storage.ts
 import { createId } from "@paralleldrive/cuid2";
 import type { R2Bucket } from "@cloudflare/workers-types";
 
