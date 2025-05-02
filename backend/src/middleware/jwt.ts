@@ -1,7 +1,7 @@
 // backend/src/middleware/jwt.ts
 import { SignJWT, jwtVerify } from "jose";
 import { MiddlewareHandler } from "hono";
-import { Env, JwtPayload } from "../types/types";
+import { Env, JwtPayload } from "@/types/types";
 
 // パスワードハッシュ設定型
 type Pbkdf2Config = {
@@ -140,6 +140,7 @@ export const jwtMiddleware: MiddlewareHandler<{
     jwtPayload?: JwtPayload;
   };
 }> = async (c, next) => {
+  // 1. Authorization ヘッダーの検証
   const authHeader = c.req.header("Authorization");
 
   if (!authHeader?.startsWith("Bearer ")) {
@@ -158,7 +159,7 @@ export const jwtMiddleware: MiddlewareHandler<{
     });
   }
 
-  //トークンの抽出と検証
+  // 2. トークンの抽出と検証
   const token = authHeader.split(" ")[1];
 
   try {
@@ -174,7 +175,7 @@ export const jwtMiddleware: MiddlewareHandler<{
       }
     );
 
-    // ペイロードの必須項目確認
+    // 3. ペイロードの必須項目確認
     if (
       typeof payload.user_id !== "number" ||
       typeof payload.email !== "string"
@@ -182,7 +183,7 @@ export const jwtMiddleware: MiddlewareHandler<{
       throw new Error("JWT payload missing required claims");
     }
 
-    // Context にユーザー情報を保存
+    // 4. Context にユーザー情報を保存
     c.set("jwtPayload", {
       user_id: payload.user_id,
       email: payload.email,
@@ -191,7 +192,7 @@ export const jwtMiddleware: MiddlewareHandler<{
 
     await next();
   } catch (error) {
-    // 認証エラー時のレスポンス
+    //  5. 認証エラー時のレスポンス
     c.status(401);
     c.header("Cache-Control", "no-store");
     c.header("X-Content-Type-Options", "nosniff");

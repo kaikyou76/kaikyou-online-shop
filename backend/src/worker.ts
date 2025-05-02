@@ -1,6 +1,6 @@
 //backend/src/worker.ts
-import app from "routes/index";
-import type { Env } from "types/types";
+import app from "@/routes/index";
+import type { Env } from "@/types/types";
 
 const worker: ExportedHandler<Env> = {
   // 通常のリクエスト処理（GET/POST など）

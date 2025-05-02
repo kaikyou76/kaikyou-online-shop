@@ -1,7 +1,7 @@
 //backend/src/types/types.ts
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { z } from "zod";
-import { productSchema } from "../schemas/product";
+import { productSchema } from "@/schemas/product";
 
 //エラーコードを定義
 export const INVALID_SESSION = "INVALID_SESSION";

@@ -1,6 +1,6 @@
 // backend/src/lib/auth.ts
 import { SignJWT, jwtVerify } from "jose";
-import { Env, JwtPayload } from "types/types";
+import { Env, JwtPayload } from "@/types/types";
 
 // トークン生成関数
 export async function generateAuthToken(

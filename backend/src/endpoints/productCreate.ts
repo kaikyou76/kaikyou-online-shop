@@ -1,8 +1,8 @@
 //backend/src/endpoints/productCreate.ts
 import { Context } from "hono";
-import { Bindings, ErrorResponse, ProductCreateResponse } from "types/types";
-import { productSchema } from "schemas/product";
-import { uploadToR2 } from "lib/storage";
+import { Bindings, ErrorResponse, ProductCreateResponse } from "@/types/types";
+import { productSchema } from "@/schemas/product";
+import { uploadToR2 } from "@/lib/storage";
 
 export const productPostHandler = async (
   c: Context<{ Bindings: Bindings }>

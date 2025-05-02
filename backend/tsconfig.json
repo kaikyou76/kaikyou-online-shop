@@ -2,9 +2,10 @@
   "compilerOptions": {
     "allowJs": true,
     "allowSyntheticDefaultImports": true,
-    "baseUrl": "./src",
+    "baseUrl": ".",
     "paths": {
-      "endpoints/*": ["endpoints/*"]
+      "@/*": ["./src/*"],
+      "@test/*": [".backend/test/*"]
     },
     "declaration": true,
     "sourceMap": true,
@@ -17,7 +18,7 @@
     "noFallthroughCasesInSwitch": true,
     "pretty": true,
     "resolveJsonModule": true,
-    "rootDir": "./src",
+    "rootDir": ".",
     "skipLibCheck": true,
     "strict": false,
     "traceResolution": false,
@@ -31,5 +32,10 @@
     ]
   },
   "exclude": ["node_modules", "dist", "tests"],
-  "include": ["src", "scripts"]
+  "include": [
+    "src",
+    "scripts",
+    "src/**/*",
+    "test/**/*" // テストディレクトリを追加
+  ]
 }

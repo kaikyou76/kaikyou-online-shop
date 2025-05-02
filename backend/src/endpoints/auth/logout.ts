@@ -1,6 +1,6 @@
 //backend/src/endpoints/auth/logout.ts
 import { Context } from "hono";
-import { Bindings, ErrorResponse, SuccessResponse } from "../../types/types";
+import { Bindings, ErrorResponse, SuccessResponse } from "@/types/types";
 
 export const logoutHandler = async (
   c: Context<{ Bindings: Bindings }>

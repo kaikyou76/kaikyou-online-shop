@@ -1,15 +1,15 @@
 //backend/src/routes/index.ts
 import { Hono } from "hono";
-import type { Bindings, Variables } from "types/types";
-import { productPostHandler } from "endpoints/productCreate";
-import { productGetHandler } from "endpoints/productGet";
-import { getCartHandler } from "endpoints/getCart";
-import { jwtMiddleware } from "middleware/jwt";
-import { productGetByIdHandler } from "endpoints/productGetById";
-import { registerHandler } from "endpoints/auth/register";
-import { loginHandler } from "endpoints/auth/login";
-import { logoutHandler } from "endpoints/auth/logout";
-import { getUserHandler } from "endpoints/auth/getUser";
+import type { Bindings, Variables } from "@/types/types";
+import { productPostHandler } from "@/endpoints/productCreate";
+import { productGetHandler } from "@/endpoints/productGet";
+import { getCartHandler } from "@/endpoints/getCart";
+import { jwtMiddleware } from "@/middleware/jwt";
+import { productGetByIdHandler } from "@/endpoints/productGetById";
+import { registerHandler } from "@/endpoints/auth/register";
+import { loginHandler } from "@/endpoints/auth/login";
+import { logoutHandler } from "@/endpoints/auth/logout";
+import { getUserHandler } from "@/endpoints/auth/getUser";
 
 const app = new Hono<{
   Bindings: Bindings;

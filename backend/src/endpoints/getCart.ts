@@ -1,6 +1,6 @@
 // backend/src/endpoints/getCart.ts
 import { Context } from "hono";
-import { Bindings, CartItem, ErrorResponse, JwtPayload } from "../types/types";
+import { Bindings, CartItem, ErrorResponse, JwtPayload } from "@/types/types";
 
 // メインハンドラー
 export const getCartHandler = async (

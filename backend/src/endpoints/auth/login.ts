@@ -1,7 +1,7 @@
 // backend/src/endpoints/auth/login.ts
 import { Context } from "hono";
-import { Bindings, ErrorResponse, SuccessResponse } from "../../types/types";
-import { generateAuthToken, verifyPassword } from "../../lib/auth";
+import { Bindings, ErrorResponse, SuccessResponse } from "@/types/types";
+import { generateAuthToken, verifyPassword } from "@/lib/auth";
 import { z } from "zod";
 
 const loginSchema = z.object({
