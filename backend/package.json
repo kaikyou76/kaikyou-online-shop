@@ -3,13 +3,18 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
+    "build": "wrangler deploy --dry-run --outdir=dist",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "start": "wrangler dev",
     "cf-typegen": "wrangler types",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:workers": "vitest --pool=@cloudflare/vitest-pool-workers",
+    "test:integration": "npm run test:workers -- --mode=integration",
+    "predeploy": "npm run build && npm run test:workers"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
@@ -19,14 +24,13 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250430.0",
+    "@cloudflare/vitest-pool-workers": "^0.8.24",
+    "@cloudflare/workers-types": "^4.20250503.0",
     "@sinonjs/fake-timers": "^14.0.0",
-    "@types/jest": "^29.5.14",
     "@types/node": "20.8.3",
     "@types/service-worker-mock": "^2.0.1",
-    "jest": "^29.7.0",
-    "miniflare": "^4.20250428.1",
-    "ts-jest": "^29.3.2",
-    "wrangler": "^4.12.0"
+    "typescript": "^5.8.3",
+    "vitest": "~3.0.0",
+    "wrangler": "^4.14.1"
   }
 }
