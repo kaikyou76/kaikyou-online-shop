@@ -1,8 +1,8 @@
 //backend/src/endpoints/productCreate.ts
 import { Context } from "hono";
-import { Bindings, ErrorResponse, ProductCreateResponse } from "@/types/types";
-import { productSchema } from "@/schemas/product";
-import { uploadToR2 } from "@/lib/storage";
+import { Bindings, ErrorResponse, ProductCreateResponse } from "../types/types";
+import { productSchema } from "../schemas/product";
+import { uploadToR2 } from "../lib/storage";
 
 export const productPostHandler = async (
   c: Context<{ Bindings: Bindings }>
@@ -35,8 +35,12 @@ export const productPostHandler = async (
     }
 
     // 画像処理
-    const mainImageFile = formData.get("mainImage") as File | null;
-    const additionalImageFiles = formData.getAll("additionalImages") as File[];
+    const mainImageRaw = formData.get("mainImage") as unknown;
+    const mainImageFile = mainImageRaw instanceof File ? mainImageRaw : null;
+    const additionalImageRaw = formData.getAll("additionalImages") as unknown[];
+    const additionalImageFiles = additionalImageRaw.filter(
+      (item): item is File => item instanceof File
+    );
 
     if (!mainImageFile?.size) {
       return c.json(

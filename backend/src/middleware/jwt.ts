@@ -1,7 +1,8 @@
 // backend/src/middleware/jwt.ts
 import { SignJWT, jwtVerify } from "jose";
 import { MiddlewareHandler } from "hono";
-import { Env, JwtPayload } from "@/types/types";
+import { Env, JwtPayload } from "../types/types";
+import { Buffer } from "buffer";
 
 // パスワードハッシュ設定型
 type Pbkdf2Config = {

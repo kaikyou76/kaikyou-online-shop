@@ -1,7 +1,7 @@
 //backend/src/endpoints/auth/register.ts
 import { Context } from "hono";
-import { Bindings, ErrorResponse, SuccessResponse } from "@/types/types";
-import { hashPassword } from "@/lib/auth";
+import { Bindings, ErrorResponse, SuccessResponse } from "../../types/types";
+import { hashPassword } from "../../lib/auth";
 import { z } from "zod";
 
 const registerSchema = z.object({
