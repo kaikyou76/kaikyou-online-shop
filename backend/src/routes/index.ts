@@ -57,7 +57,10 @@ app
 app
   .post("/api/products", productPostHandler)
   .get("/api/products", productGetHandler)
-  .get("/api/products/:id", productGetByIdHandler);
+  .get("/api/products/:id", productGetByIdHandler)
+  .options("/api/products", (c) => {
+    return c.body(null, 204); // 204 No Contentを返す
+  });
 
 // Cart API
 app
