@@ -1,5 +1,6 @@
 //backend/src/routes/index.ts
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import type { Bindings, Variables } from "../types/types";
 import { productPostHandler } from "../endpoints/productCreate";
 import { productGetHandler } from "../endpoints/productGet";
@@ -19,27 +20,16 @@ const app = new Hono<{
 // =====================
 // Global Middlewares
 // =====================
-app.use("*", async (c, next) => {
-  // CORS Preflight
-  if (c.req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers":
-          "Content-Type, Authorization, X-Session-ID",
-        "Access-Control-Max-Age": "86400",
-      },
-    });
-  }
-
-  await next();
-
-  // CORS Headers
-  c.header("Access-Control-Allow-Origin", "*");
-  c.header("Vary", "Origin");
-});
+app.use(
+  "*",
+  cors({
+    origin: "*",
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Session-ID"],
+    exposeHeaders: ["Content-Length"],
+    maxAge: 86400,
+  })
+);
 
 // =====================
 // Authentication Middleware
@@ -88,9 +78,12 @@ app.get("/health", (c) =>
 // =====================
 // Error Handling
 // =====================
+app.notFound((c) => {
+  return c.json({ message: "Route Not Found" }, 404);
+});
+
 app.onError((err, c) => {
   console.error(`[${new Date().toISOString()}] Error:`, err);
-
   return c.json(
     {
       error: {
