@@ -108,4 +108,4 @@ app.onError((err, c) => {
   );
 });
 
-export default app.fetch;
+export default app;
