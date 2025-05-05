@@ -22,11 +22,12 @@ async function getProduct(id: string): Promise<Product | null> {
 }
 
 type Props = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export default async function ProductDetail({ params }: Props) {
-  const product = await getProduct(params.id);
+  const { id } = await params; // params を await する
+  const product = await getProduct(id);
 
   if (!product) {
     return (
