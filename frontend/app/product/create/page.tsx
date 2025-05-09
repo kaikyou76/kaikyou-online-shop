@@ -229,11 +229,11 @@ export default function ProductCreatePage() {
   };
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
+    <div className="p-6 max-w-2xl mx-auto bg-background text-foreground">
       <h1 className="text-2xl font-bold mb-6">新規商品登録</h1>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-md">
+        <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-md dark:bg-red-900 dark:text-red-100">
           {error}
         </div>
       )}
@@ -241,7 +241,7 @@ export default function ProductCreatePage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* 商品基本情報 */}
         <div>
-          <label className="block mb-1 font-medium text-gray-700">
+          <label className="block mb-1 font-medium text-gray-700 dark:text-gray-300">
             商品名<span className="text-red-500">*</span>
           </label>
           <input
@@ -250,24 +250,26 @@ export default function ProductCreatePage() {
             value={formData.name}
             onChange={handleChange}
             required
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
           />
         </div>
 
         <div>
-          <label className="block mb-1 font-medium text-gray-700">説明</label>
+          <label className="block mb-1 font-medium text-gray-700 dark:text-gray-300">
+            説明
+          </label>
           <textarea
             name="description"
             value={formData.description}
             onChange={handleChange}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
             rows={4}
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block mb-1 font-medium text-gray-700">
+            <label className="block mb-1 font-medium text-gray-700 dark:text-gray-300">
               価格<span className="text-red-500">*</span>
             </label>
             <input
@@ -278,12 +280,12 @@ export default function ProductCreatePage() {
               min="1"
               step="1"
               required
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
             />
           </div>
 
           <div>
-            <label className="block mb-1 font-medium text-gray-700">
+            <label className="block mb-1 font-medium text-gray-700 dark:text-gray-300">
               在庫数
             </label>
             <input
@@ -292,21 +294,21 @@ export default function ProductCreatePage() {
               value={formData.stock || ""}
               onChange={handleChange}
               min="0"
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
             />
           </div>
         </div>
 
         {/* カテゴリ選択 */}
         <div>
-          <label className="block mb-1 font-medium text-gray-700">
+          <label className="block mb-1 font-medium text-gray-700 dark:text-gray-300">
             カテゴリ
           </label>
           <select
             name="category_id"
             value={formData.category_id ?? ""}
             onChange={handleChange}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
           >
             <option value="">--カテゴリを選択--</option>
             {categories.map((category) => (
@@ -319,7 +321,7 @@ export default function ProductCreatePage() {
 
         {/* 画像アップロード */}
         <div>
-          <label className="block mb-1 font-medium text-gray-700">
+          <label className="block mb-1 font-medium text-gray-700 dark:text-gray-300">
             メイン画像<span className="text-red-500">*</span>
           </label>
           <input
@@ -327,14 +329,16 @@ export default function ProductCreatePage() {
             accept="image/*"
             onChange={handleMainImageChange}
             required
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
           />
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-500 mt-1 dark:text-gray-400">
             {MAX_MAIN_IMAGE_SIZE / 1024 / 1024}MB以下の画像を選択してください
           </p>
           {mainImagePreview && (
             <div className="mt-2">
-              <p className="text-sm text-gray-500 mb-1">プレビュー:</p>
+              <p className="text-sm text-gray-500 mb-1 dark:text-gray-400">
+                プレビュー:
+              </p>
               <img
                 src={mainImagePreview}
                 alt="メイン画像プレビュー"
@@ -345,7 +349,7 @@ export default function ProductCreatePage() {
         </div>
 
         <div>
-          <label className="block mb-1 font-medium text-gray-700">
+          <label className="block mb-1 font-medium text-gray-700 dark:text-gray-300">
             追加画像 (最大{MAX_ADDITIONAL_IMAGES}枚)
           </label>
           <input
@@ -355,16 +359,18 @@ export default function ProductCreatePage() {
             onChange={handleAdditionalImagesChange}
             ref={additionalInputRef}
             disabled={additionalImages.length >= MAX_ADDITIONAL_IMAGES}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
           />
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-500 mt-1 dark:text-gray-400">
             {MAX_ADDITIONAL_IMAGE_SIZE / 1024 / 1024}
             MB以下の画像を選択してください (残り
             {MAX_ADDITIONAL_IMAGES - additionalImages.length}枚追加可能)
           </p>
           {additionalPreviews.length > 0 && (
             <div className="mt-2">
-              <p className="text-sm text-gray-500 mb-1">追加画像プレビュー:</p>
+              <p className="text-sm text-gray-500 mb-1 dark:text-gray-400">
+                追加画像プレビュー:
+              </p>
               <div className="flex flex-wrap gap-2">
                 {additionalPreviews.map((preview, index) => (
                   <div key={index} className="relative group">
@@ -393,7 +399,7 @@ export default function ProductCreatePage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 disabled:bg-blue-300 transition-colors shadow-md flex justify-center items-center"
+            className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 disabled:bg-blue-300 transition-colors shadow-md flex justify-center items-center dark:bg-blue-700 dark:hover:bg-blue-800"
           >
             {isLoading ? (
               <>
@@ -426,7 +432,7 @@ export default function ProductCreatePage() {
 
           <Link
             href="/"
-            className="flex-1 text-center bg-gray-200 text-gray-800 py-3 px-4 rounded-md hover:bg-gray-300 transition-colors shadow-md"
+            className="flex-1 text-center bg-gray-200 text-gray-800 py-3 px-4 rounded-md hover:bg-gray-300 transition-colors shadow-md dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
           >
             キャンセル
           </Link>

@@ -1,0 +1,16 @@
+// test/tsconfig.json
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "types": [
+      "@cloudflare/vitest-pool-workers", // `cloudflare:test`の型を提供
+      "@cloudflare/workers-types" // Cloudflare Workers の型を追加
+    ]
+  },
+  "include": [
+    "./**/*.ts",
+    "../src/**/*.d.ts", // グローバル型定義を含める
+    "../src/worker-configuration.d.ts" // `wrangler types`の出力を追加
+  ]
+}

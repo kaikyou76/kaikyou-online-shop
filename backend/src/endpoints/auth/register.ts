@@ -5,9 +5,16 @@ import { hashPassword } from "../../lib/auth";
 import { z } from "zod";
 
 const registerSchema = z.object({
-  name: z.string().min(2).max(50),
-  email: z.string().email(),
-  password: z.string().min(8),
+  name: z
+    .string()
+    .min(2, { message: "名前は2文字以上で入力してください" })
+    .max(50, { message: "名前は50文字以内で入力してください" }),
+  email: z
+    .string()
+    .email({ message: "正しいメールアドレスを入力してください" }),
+  password: z
+    .string()
+    .min(8, { message: "パスワードは8文字以上で入力してください" }),
 });
 
 export const registerHandler = async (

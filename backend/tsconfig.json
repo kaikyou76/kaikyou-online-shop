@@ -22,6 +22,6 @@
     "module": "esnext",
     "types": ["@cloudflare/workers-types"]
   },
-  "exclude": ["node_modules", "dist", "test"],
+  "exclude": ["node_modules", "dist"],
   "include": ["src", "scripts"]
 }

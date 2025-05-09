@@ -3,6 +3,12 @@
   "name": "backend",
   "main": "src/worker.ts",
   "compatibility_date": "2025-04-18",
+  "kv_namespaces": [
+    {
+      "binding": "TEST_NAMESPACE",
+      "id": "test-namespace-id"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
