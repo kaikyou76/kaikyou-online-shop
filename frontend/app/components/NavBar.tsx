@@ -6,11 +6,7 @@ const NavBar = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
 
   const handleLoginLogout = () => {
-    if (isLoggedIn) {
-      setIsLoggedIn(false);
-    } else {
-      setIsLoggedIn(true);
-    }
+    setIsLoggedIn(!isLoggedIn);
   };
 
   return (
@@ -26,6 +22,13 @@ const NavBar = () => {
             Products
           </Link>
         </li>
+        {!isLoggedIn && (
+          <li>
+            <Link href="/register" className="hover:text-blue-600">
+              Register
+            </Link>
+          </li>
+        )}
         <li>
           {isLoggedIn ? (
             <button onClick={handleLoginLogout} className="hover:text-blue-600">
