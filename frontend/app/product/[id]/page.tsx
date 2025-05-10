@@ -35,11 +35,15 @@ async function getProduct(id: string): Promise<Product | null> {
 export default async function ProductDetail({
   params,
 }: {
-  params: Promise<{ id: string }>; // Promise型を保持
+  params: Promise<{ id: string }>;
 }) {
-  // paramsをawaitで解決
   const resolvedParams = await params;
   const product = await getProduct(resolvedParams.id);
+
+  const getPlaceholderImage = (id: number) => {
+    const imageIndex = (id % 5) + 1;
+    return `/placeholder-${imageIndex}.jpg`;
+  };
 
   if (!product) {
     return (
@@ -65,11 +69,6 @@ export default async function ProductDetail({
     );
   }
 
-  const getPlaceholderImage = (id: number) => {
-    const imageIndex = (id % 5) + 1;
-    return `/placeholder-${imageIndex}.jpg`;
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
@@ -90,7 +89,9 @@ export default async function ProductDetail({
               <div className="relative aspect-square overflow-hidden rounded-lg">
                 <ProductImage
                   id={product.id}
-                  imageUrl={product.image_url}
+                  imageUrl={
+                    product.image_url || getPlaceholderImage(product.id)
+                  }
                   alt={product.name}
                 />
                 {product.stock <= 0 && (

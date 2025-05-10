@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 
 type ProductFormData = {
   name: string;
@@ -339,11 +340,16 @@ export default function ProductCreatePage() {
               <p className="text-sm text-gray-500 mb-1 dark:text-gray-400">
                 プレビュー:
               </p>
-              <img
-                src={mainImagePreview}
-                alt="メイン画像プレビュー"
-                className="h-40 object-contain border rounded-md"
-              />
+              <div className="relative h-40 w-full">
+                <Image
+                  src={mainImagePreview}
+                  alt="メイン画像プレビュー"
+                  fill
+                  className="object-contain border rounded-md"
+                  unoptimized
+                  onError={() => setMainImagePreview(null)}
+                />
+              </div>
             </div>
           )}
         </div>
@@ -373,12 +379,17 @@ export default function ProductCreatePage() {
               </p>
               <div className="flex flex-wrap gap-2">
                 {additionalPreviews.map((preview, index) => (
-                  <div key={index} className="relative group">
-                    <img
-                      src={preview}
-                      alt={`追加画像プレビュー ${index + 1}`}
-                      className="h-24 w-24 object-cover border rounded-md"
-                    />
+                  <div key={index} className="relative group h-24 w-24">
+                    <div className="relative h-full w-full">
+                      <Image
+                        src={preview}
+                        alt={`追加画像プレビュー ${index + 1}`}
+                        fill
+                        className="object-cover border rounded-md"
+                        unoptimized
+                        onError={() => removeAdditionalImage(index)}
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={() => removeAdditionalImage(index)}

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -14,7 +14,7 @@ const NavBar = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const router = useRouter();
+  const router = useRouter(); // 削除せずに保持（将来の使用を見越して）
 
   const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (!apiUrl) throw new Error("APIエンドポイントが設定されていません");
@@ -41,9 +41,11 @@ const NavBar = () => {
     storage.remove("user");
     setIsLoggedIn(false);
     setCurrentUser(null);
+    router.push("/"); // ログアウト後はホームにリダイレクト（routerを使用）
   };
 
-  const checkAuth = async () => {
+  // useCallbackでメモ化（useEffectの依存配列警告対策）
+  const checkAuth = useCallback(async () => {
     const token = storage.get("token");
     if (!token) {
       clearAuth();
@@ -67,11 +69,11 @@ const NavBar = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [apiUrl, storage]); // 依存関係を明示
 
   useEffect(() => {
     checkAuth();
-  }, []);
+  }, [checkAuth]); // checkAuthを依存配列に追加
 
   if (isLoading) {
     return <div className="animate-pulse h-16 bg-gray-100"></div>;
