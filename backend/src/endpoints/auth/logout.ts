@@ -1,3 +1,4 @@
+//backend/src/endpoints/auth/logout.ts
 import { Context } from "hono";
 import { Bindings, ErrorResponse, SuccessResponse } from "../../types/types";
 

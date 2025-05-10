@@ -1,4 +1,4 @@
-//backend/src/routes/index.ts
+// backend/src/routes/index.ts
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Bindings, Variables } from "../types/types";
@@ -17,88 +17,54 @@ const app = new Hono<{
   Variables: Variables;
 }>();
 
-// =====================
-// Global Middlewares
-// =====================
-app.use(
+// グローバルミドルウェア
+app.use("*", async (c, next) => {
+  console.log(`[${new Date().toISOString()}] ${c.req.method} ${c.req.path}`);
+  await next();
+});
+
+// ヘルスチェック
+app.get("/health", (c) => c.json({ status: "ok" }));
+
+// APIルート (ベースパス /api)
+const apiRoutes = app.basePath("/api");
+
+// CORS設定はapiRoutesに対してのみ適用
+apiRoutes.use(
   "*",
   cors({
     origin: "*",
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "X-Session-ID"],
+    allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["Content-Length"],
     maxAge: 86400,
   })
 );
 
-// =====================
-// Authentication Middleware
-// =====================
-app.use("/api/cart/*", jwtMiddleware);
-app.use("/api/products/*", async (c, next) => {
-  if (["POST", "PUT", "DELETE"].includes(c.req.method)) {
-    return jwtMiddleware(c, next);
-  }
-  await next();
-});
+// 認証不要ルート (すべて /api 配下に移動)
+apiRoutes.post("/register", registerHandler);
+apiRoutes.post("/login", loginHandler);
+apiRoutes.get("/products", productGetHandler);
+apiRoutes.get("/products/:id", productGetByIdHandler);
 
-// =====================
-// API Routes
-// =====================
+// 認証必須ルート
+const protectedRoutes = apiRoutes.use("*", jwtMiddleware);
+protectedRoutes.post("/logout", logoutHandler);
+protectedRoutes.get("/users/me", getUserHandler);
+protectedRoutes.post("/products", productPostHandler);
+protectedRoutes.get("/cart", getCartHandler);
 
-// User API
-app
-  .post("/api/register", registerHandler)
-  .post("/api/login", loginHandler)
-  .post("/api/logout", logoutHandler)
-  .get("/api/users/me", jwtMiddleware, getUserHandler);
-
-// Product API
-app
-  .post("/api/products", productPostHandler)
-  .get("/api/products", productGetHandler)
-  .get("/api/products/:id", productGetByIdHandler)
-  .options("/api/products", (c) => {
-    return c.body(null, 204); // 204 No Contentを返す
-  });
-
-// Cart API
-app
-  .get("/api/cart", getCartHandler)
-  .post("/api/cart" /* cartPostHandler */)
-  .delete("/api/cart/:productId" /* cartDeleteHandler */);
-
-// =====================
-// System Routes
-// =====================
-app.get("/health", (c) =>
-  c.json({
-    status: "healthy",
-    environment: c.env.ENVIRONMENT,
-  })
-);
-
-// =====================
-// Error Handling
-// =====================
-app.notFound((c) => {
-  return c.json({ message: "Route Not Found" }, 404);
-});
+// エラーハンドリング
+app.notFound((c) => c.json({ error: "Not Found" }, 404));
 
 app.onError((err, c) => {
-  console.error(`[${new Date().toISOString()}] Error:`, err);
+  console.error("Error:", err);
   return c.json(
     {
-      error: {
-        message: "Internal Server Error",
-        details:
-          c.env.ENVIRONMENT === "development"
-            ? {
-                error: err.message,
-                stack: err.stack,
-              }
-            : undefined,
-      },
+      error: "Internal Server Error",
+      ...(c.env.ENVIRONMENT === "development" && {
+        details: err.message,
+      }),
     },
     500
   );

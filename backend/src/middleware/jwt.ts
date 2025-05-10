@@ -4,7 +4,22 @@ import { MiddlewareHandler } from "hono";
 import { Env, JwtPayload } from "../types/types";
 import { Buffer } from "buffer";
 
-// パスワードハッシュ設定型
+// デバッグ用ロガー
+const debugLog = (message: string, data?: any) => {
+  console.log(
+    `[${new Date().toISOString()}] [JWT] ${message}`,
+    JSON.stringify(data, null, 2)
+  );
+};
+
+// エラーロガー
+const errorLog = (error: Error, context?: any) => {
+  console.error(`[${new Date().toISOString()}] [JWT ERROR] ${error.message}`, {
+    stack: error.stack,
+    context,
+  });
+};
+
 type Pbkdf2Config = {
   iterations: number;
   hash: "SHA-256" | "SHA-512";
@@ -12,7 +27,6 @@ type Pbkdf2Config = {
   keyLen: number;
 };
 
-// 環境別PBKDF2設定
 const PBKDF2_CONFIG: Record<string, Pbkdf2Config> = {
   development: {
     iterations: 100_000,
@@ -28,59 +42,82 @@ const PBKDF2_CONFIG: Record<string, Pbkdf2Config> = {
   },
 };
 
-// 認証トークン生成
 export async function generateAuthToken(
   env: Env,
   userId: number,
   email: string,
   expiresIn = "2h"
 ): Promise<string> {
-  const secret = new TextEncoder().encode(env.JWT_SECRET);
-  return new SignJWT({ user_id: userId, email })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuer(env.JWT_ISSUER)
-    .setAudience(env.JWT_AUDIENCE)
-    .setExpirationTime(expiresIn)
-    .setIssuedAt()
-    .sign(secret);
+  try {
+    const secret = new TextEncoder().encode(env.JWT_SECRET);
+    const token = await new SignJWT({ user_id: userId, email })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuer(env.JWT_ISSUER)
+      .setAudience(env.JWT_AUDIENCE)
+      .setExpirationTime(expiresIn)
+      .setIssuedAt()
+      .sign(secret);
+
+    debugLog("トークン生成成功", { userId, email, expiresIn });
+    return token;
+  } catch (error) {
+    errorLog(error instanceof Error ? error : new Error(String(error)), {
+      userId,
+      email,
+    });
+    throw new Error("トークン生成に失敗しました");
+  }
 }
 
-// パスワードハッシュ生成
 export async function hashPassword(
   password: string,
   env: Env
 ): Promise<string> {
   const config = PBKDF2_CONFIG[env.ENVIRONMENT] || PBKDF2_CONFIG.production;
-  const salt = crypto.getRandomValues(new Uint8Array(config.saltLen));
-  const encoder = new TextEncoder();
 
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"]
-  );
+  debugLog("パスワードハッシュ処理開始", {
+    env: env.ENVIRONMENT,
+    config,
+  });
 
-  const derivedBits = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      salt,
-      iterations: config.iterations,
-      hash: config.hash,
-    },
-    keyMaterial,
-    config.keyLen * 8
-  );
+  try {
+    const salt = crypto.getRandomValues(new Uint8Array(config.saltLen));
+    const encoder = new TextEncoder();
 
-  const hash = new Uint8Array(derivedBits);
-  const saltB64 = Buffer.from(salt).toString("base64");
-  const hashB64 = Buffer.from(hash).toString("base64");
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(password),
+      "PBKDF2",
+      false,
+      ["deriveBits"]
+    );
 
-  return `${saltB64}:${hashB64}:${config.iterations}:${config.hash}`;
+    const derivedBits = await crypto.subtle.deriveBits(
+      {
+        name: "PBKDF2",
+        salt,
+        iterations: config.iterations,
+        hash: config.hash,
+      },
+      keyMaterial,
+      config.keyLen * 8
+    );
+
+    const hash = new Uint8Array(derivedBits);
+    const saltB64 = Buffer.from(salt).toString("base64");
+    const hashB64 = Buffer.from(hash).toString("base64");
+
+    const result = `${saltB64}:${hashB64}:${config.iterations}:${config.hash}`;
+    debugLog("パスワードハッシュ生成成功", {
+      result: result.slice(0, 10) + "...",
+    });
+    return result;
+  } catch (error) {
+    errorLog(error instanceof Error ? error : new Error(String(error)));
+    throw new Error("パスワードハッシュ生成に失敗しました");
+  }
 }
 
-// タイミングセーフ比較（Node.jsやCloudflare対応）
 function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -90,14 +127,18 @@ function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
   return diff === 0;
 }
 
-// パスワード検証
 export async function verifyPassword(
   password: string,
   hashedPassword: string
 ): Promise<boolean> {
   try {
+    debugLog("パスワード検証開始", {
+      hashedPassword: hashedPassword.slice(0, 10) + "...",
+    });
+
     const [saltB64, hashB64, iterationsStr, hashAlgStr] =
       hashedPassword.split(":");
+
     if (!saltB64 || !hashB64 || !iterationsStr || !hashAlgStr) {
       throw new Error("Invalid password format");
     }
@@ -127,84 +168,111 @@ export async function verifyPassword(
     );
 
     const actualHash = new Uint8Array(derivedBits);
-    return timingSafeEqual(actualHash, expectedHash);
+    const isValid = timingSafeEqual(actualHash, expectedHash);
+
+    debugLog("パスワード検証結果", { isValid });
+    return isValid;
   } catch (error) {
-    console.error("Password verification error:", error);
+    errorLog(error instanceof Error ? error : new Error(String(error)));
     return false;
   }
 }
 
-// JWT 検証ミドルウェア
 export const jwtMiddleware: MiddlewareHandler<{
   Bindings: Env;
   Variables: {
     jwtPayload?: JwtPayload;
   };
 }> = async (c, next) => {
+  const requestId = Math.random().toString(36).substring(2, 8);
+  const logContext = {
+    requestId,
+    method: c.req.method,
+    path: c.req.path,
+    env: c.env.ENVIRONMENT,
+  };
+
+  debugLog("ミドルウェア開始", logContext);
+
   // 1. Authorization ヘッダーの検証
   const authHeader = c.req.header("Authorization");
+  debugLog("認証ヘッダー確認", {
+    header: authHeader ? `${authHeader.slice(0, 10)}...` : null,
+  });
 
   if (!authHeader?.startsWith("Bearer ")) {
+    const error = new Error("Authorizationヘッダーが不正");
+    errorLog(error, logContext);
+
     c.status(401);
     c.header("WWW-Authenticate", "Bearer");
-    c.header("X-Content-Type-Options", "nosniff");
     return c.json({
       success: false,
       error: {
         code: "INVALID_AUTH_HEADER",
         message: "Authorization: Bearer <token> 形式が必要です",
-        ...(c.env.ENVIRONMENT === "development" && {
-          details: "Missing or malformed Authorization header",
-        }),
       },
     });
   }
 
-  // 2. トークンの抽出と検証
+  // 2. トークンの抽出
   const token = authHeader.split(" ")[1];
+  debugLog("トークン抽出", {
+    token: token.slice(0, 10) + "..." + token.slice(-10),
+  });
 
   try {
+    // 3. トークン検証
+    debugLog("トークン検証開始", logContext);
     const { payload } = await jwtVerify(
       token,
       new TextEncoder().encode(c.env.JWT_SECRET),
       {
         issuer: c.env.JWT_ISSUER,
         audience: c.env.JWT_AUDIENCE,
-        clockTolerance: 15,
         algorithms: ["HS256"],
-        maxTokenAge: "2h",
       }
     );
 
-    // 3. ペイロードの必須項目確認
+    debugLog("トークンペイロード", {
+      user_id: payload.user_id,
+      email: payload.email,
+      exp: payload.exp,
+    });
+
+    // 4. ペイロード検証
     if (
       typeof payload.user_id !== "number" ||
       typeof payload.email !== "string"
     ) {
-      throw new Error("JWT payload missing required claims");
+      throw new Error("必須クレームが不足しています");
     }
 
-    // 4. Context にユーザー情報を保存
+    // 5. コンテキストに保存
     c.set("jwtPayload", {
       user_id: payload.user_id,
       email: payload.email,
-      exp: payload.exp ?? Math.floor(Date.now() / 1000) + 7200,
+      exp: payload.exp,
     });
 
+    debugLog("認証成功", { user_id: payload.user_id });
     await next();
+    debugLog("ミドルウェア完了", logContext);
   } catch (error) {
-    //  5. 認証エラー時のレスポンス
-    c.status(401);
-    c.header("Cache-Control", "no-store");
-    c.header("X-Content-Type-Options", "nosniff");
+    const err = error instanceof Error ? error : new Error(String(error));
+    errorLog(err, {
+      ...logContext,
+      token: token.slice(0, 10) + "..." + token.slice(-10),
+    });
 
+    c.status(401);
     return c.json({
       success: false,
       error: {
         code: "AUTH_FAILURE",
         message: "認証に失敗しました",
         ...(c.env.ENVIRONMENT === "development" && {
-          details: error instanceof Error ? error.message : "Unknown error",
+          details: err.message,
         }),
       },
     });

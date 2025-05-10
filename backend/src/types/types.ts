@@ -99,6 +99,17 @@ export interface SuccessResponse<T = unknown> {
   };
 }
 
+export interface LoginResponseData {
+  token: string;
+  refreshToken?: string; // オプショナル追加
+  user: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+  };
+}
+
 /**
  * Hono の Context に拡張変数を型として登録
  * ctx.get('jwtPayload') などの補完が効くようになる

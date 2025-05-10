@@ -1,6 +1,11 @@
 // backend/src/endpoints/auth/login.ts
 import { Context } from "hono";
-import { Bindings, ErrorResponse, SuccessResponse } from "../../types/types";
+import {
+  Bindings,
+  ErrorResponse,
+  LoginResponseData,
+  SuccessResponse,
+} from "../../types/types";
 import { generateAuthToken, verifyPassword } from "../../lib/auth";
 import { z } from "zod";
 
@@ -84,7 +89,7 @@ export const loginHandler = async (
             role: user.role,
           },
         },
-      } satisfies SuccessResponse,
+      } satisfies SuccessResponse<LoginResponseData>,
       200
     );
   } catch (error) {
