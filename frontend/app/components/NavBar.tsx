@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 interface User {
   id: number;
@@ -11,72 +11,94 @@ interface User {
 }
 
 const NavBar = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [authState, setAuthState] = useState<
+    "loading" | "authenticated" | "unauthenticated"
+  >("loading");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const router = useRouter(); // 削除せずに保持（将来の使用を見越して）
+  const router = useRouter();
+  const pathname = usePathname();
 
   const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (!apiUrl) throw new Error("APIエンドポイントが設定されていません");
 
-  // 安全なlocalStorage操作
+  // 安全なストレージ操作 (TypeScript型付き)
   const storage = {
-    set: (key: string, value: string) => {
-      if (typeof window !== "undefined") {
-        localStorage.setItem(key, value);
-        console.log(`LocalStorageに保存: ${key}`);
+    get: <T,>(key: string): T | null => {
+      if (typeof window === "undefined") return null;
+      const item = localStorage.getItem(key);
+      if (!item) return null;
+      // JSONとして解析可能かチェック
+      try {
+        return JSON.parse(item) as T;
+      } catch (e) {
+        // JSONではない場合は生の文字列として返す
+        return item as unknown as T;
       }
     },
-    get: (key: string) => {
-      if (typeof window !== "undefined") return localStorage.getItem(key);
-      return null;
+    set: (key: string, value: unknown) => {
+      if (typeof window === "undefined") return;
+      // 文字列でもオブジェクトでも統一してJSON保存
+      localStorage.setItem(key, JSON.stringify(value));
     },
     remove: (key: string) => {
-      if (typeof window !== "undefined") localStorage.removeItem(key);
+      if (typeof window === "undefined") return;
+      localStorage.removeItem(key);
     },
   };
 
-  const clearAuth = () => {
+  const clearAuth = useCallback(() => {
     storage.remove("token");
     storage.remove("user");
-    setIsLoggedIn(false);
+    setAuthState("unauthenticated");
     setCurrentUser(null);
-    router.push("/"); // ログアウト後はホームにリダイレクト（routerを使用）
-  };
+  }, [storage]);
 
-  // useCallbackでメモ化（useEffectの依存配列警告対策）
-  const checkAuth = useCallback(async () => {
-    const token = storage.get("token");
-    if (!token) {
-      clearAuth();
-      setIsLoading(false);
+  const verifyAuth = useCallback(async () => {
+    if (typeof window === "undefined") return;
+
+    // トークン取得（JSON解析失敗時は生の文字列として扱う）
+    const token = storage.get<string>("token");
+    if (typeof token !== "string") {
+      setAuthState("unauthenticated");
       return;
     }
 
     try {
+      // 認証APIリクエスト
       const response = await fetch(`${apiUrl}/api/users/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!response.ok) throw new Error("認証失敗");
+      if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
 
+      // ユーザーデータ処理
       const userData = await response.json();
+      storage.set("user", userData);
       setCurrentUser(userData);
-      setIsLoggedIn(true);
+      setAuthState("authenticated");
     } catch (error) {
-      console.error("認証チェックエラー:", error);
-      clearAuth();
-    } finally {
-      setIsLoading(false);
+      console.error("認証エラー:", error);
+      storage.remove("token"); // 不正なトークンを削除
+      setAuthState("unauthenticated");
     }
-  }, [apiUrl, storage]); // 依存関係を明示
+  }, [apiUrl, storage]);
 
+  // 認証状態チェック
   useEffect(() => {
-    checkAuth();
-  }, [checkAuth]); // checkAuthを依存配列に追加
+    verifyAuth();
+  }, [verifyAuth]);
 
-  if (isLoading) {
-    return <div className="animate-pulse h-16 bg-gray-100"></div>;
+  // 認証状態に基づくリダイレクト制御
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const publicPaths = ["/", "/login", "/register"];
+    if (authState === "unauthenticated" && !publicPaths.includes(pathname)) {
+      router.push("/login");
+    }
+  }, [authState, pathname, router]);
+
+  if (authState === "loading") {
+    return <div className="animate-pulse h-16 bg-gray-100" />;
   }
 
   return (
@@ -88,11 +110,11 @@ const NavBar = () => {
           </Link>
         </li>
         <li>
-          <Link href="/" className="hover:text-blue-600">
+          <Link href="/products" className="hover:text-blue-600">
             Products
           </Link>
         </li>
-        {isLoggedIn ? (
+        {authState === "authenticated" ? (
           <>
             {currentUser && (
               <li className="text-sm text-gray-600">
