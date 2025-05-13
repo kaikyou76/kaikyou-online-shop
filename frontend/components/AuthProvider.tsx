@@ -60,6 +60,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const checkAuth = async () => {
     if (typeof window === "undefined") return; // SSR中はスキップ
     const token = storage.get("token");
+    console.log("🔑 Vercel上のトークン:", token); // これが undefined/null なら100%原因
     if (!token) {
       console.warn("トークンが見つかりません（client）");
       clearAuth();
