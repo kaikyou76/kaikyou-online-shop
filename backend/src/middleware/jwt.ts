@@ -75,7 +75,10 @@ export async function hashPassword(
 ): Promise<string> {
   const config = PBKDF2_CONFIG[env.ENVIRONMENT] || PBKDF2_CONFIG.production;
 
-  debugLog("パスワードハッシュ処理開始", { env: env.ENVIRONMENT, config });
+  debugLog("パスワードハッシュ処理開始", {
+    env: env.ENVIRONMENT,
+    config,
+  });
 
   try {
     const salt = crypto.getRandomValues(new Uint8Array(config.saltLen));
@@ -213,19 +216,9 @@ export const jwtMiddleware: MiddlewareHandler<{
   }
 
   // 2. トークンの抽出
-  const rawToken = authHeader.split(" ")[1];
-
-  let tokenVersion: string | null = null;
-  let token: string = rawToken;
-
-  if (rawToken.startsWith("v1:")) {
-    tokenVersion = "v1";
-    token = rawToken.substring(3); // "v1:" を取り除く
-  }
-
+  const token = authHeader.split(" ")[1];
   debugLog("トークン抽出", {
     token: token.slice(0, 10) + "..." + token.slice(-10),
-    tokenVersion,
   });
 
   try {
@@ -262,7 +255,7 @@ export const jwtMiddleware: MiddlewareHandler<{
       exp: payload.exp,
     });
 
-    debugLog("認証成功", { user_id: payload.user_id, tokenVersion });
+    debugLog("認証成功", { user_id: payload.user_id });
     await next();
     debugLog("ミドルウェア完了", logContext);
   } catch (error) {
@@ -270,7 +263,6 @@ export const jwtMiddleware: MiddlewareHandler<{
     errorLog(err, {
       ...logContext,
       token: token.slice(0, 10) + "..." + token.slice(-10),
-      tokenVersion,
     });
 
     c.status(401);
