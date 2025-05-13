@@ -58,8 +58,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const checkAuth = async () => {
+    if (typeof window === "undefined") return; // SSR中はスキップ
     const token = storage.get("token");
     if (!token) {
+      console.warn("トークンが見つかりません（client）");
       clearAuth();
       setIsLoading(false);
       return;
