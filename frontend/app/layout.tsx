@@ -1,6 +1,6 @@
 // frontend/app/layout.tsx
 import "../styles/globals.css";
-import { AuthProvider } from "../components/AuthContext";
+import { AuthProvider } from "../components/AuthProvider";
 import NavBar from "../components/NavBar";
 
 export const metadata = {
@@ -16,7 +16,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-background text-foreground">
-        {/* NavBarを追加 */}
         <AuthProvider>
           <NavBar />
           {children}

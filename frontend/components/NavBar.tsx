@@ -1,9 +1,17 @@
+// components/NavBar.tsx
 "use client";
+
 import Link from "next/link";
-import { useAuth } from "./AuthContext";
+import { useRouter } from "next/navigation";
+import { useAuth } from "./AuthProvider";
 
 const NavBar = () => {
-  const { authState, currentUser, clearAuth } = useAuth();
+  const { isLoggedIn, isLoading, currentUser, clearAuth } = useAuth();
+  const router = useRouter();
+
+  if (isLoading) {
+    return <div className="animate-pulse h-16 bg-gray-100"></div>;
+  }
 
   return (
     <nav className="bg-background text-foreground p-4 shadow-md">
@@ -18,7 +26,7 @@ const NavBar = () => {
             Products
           </Link>
         </li>
-        {authState === "authenticated" ? (
+        {isLoggedIn ? (
           <>
             {currentUser && (
               <li className="text-sm text-gray-600">
