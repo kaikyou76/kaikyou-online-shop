@@ -53,7 +53,8 @@ apiRoutes.use("*", async (c, next) => {
       c.env.ENVIRONMENT === "production"
         ? [
             "https://kaikyou-online-shop.onrender.com",
-            "https://kaikyou-online-shop-a931tgj10-kaikyous-projects.vercel.app",
+            "https://kaikyou-online-shop.vercel.app",
+            "http://localhost:3000",
           ]
         : [
             "http://localhost:3000",
