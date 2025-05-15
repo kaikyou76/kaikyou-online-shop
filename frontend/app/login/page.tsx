@@ -1,8 +1,8 @@
+// frontend/app/login/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { encryptData } from "../lib/security"; // 自作の暗号化関数
 
 export default function LoginPage() {
   const router = useRouter();
@@ -59,56 +59,37 @@ export default function LoginPage() {
       const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
       if (!apiUrl) throw new Error("APIエンドポイントが設定されていません");
 
-      console.log("送信データ:", JSON.stringify(formData));
-      console.log("API URL:", apiUrl);
-
       const response = await fetch(`${apiUrl}/api/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(formData),
+        credentials: "include",
       });
 
-      const data = await response.json();
-      console.log("APIレスポンス全体:", data);
-
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(
           data?.message || `ログインに失敗しました (HTTP ${response.status})`
         );
       }
 
-      // トークン処理のデバッグ
-      console.log("受信トークン (生):", data.data?.token);
+      const { data } = await response.json();
+      if (data?.token) {
+        localStorage.setItem("jwtToken", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
 
-      if (data?.data?.token) {
-        const encryptedToken = await encryptData(data.data.token);
-        console.log("暗号化されたトークン:", encryptedToken);
+        // AuthProviderに状態更新を通知
+        window.dispatchEvent(new Event("storage"));
 
-        localStorage.setItem("token-test", "test-token-123");
-        console.log(
-          "テストトークン保存結果:",
-          localStorage.getItem("token-test")
-        );
+        // 状態更新が確実に行われるように少し待機
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
-        localStorage.setItem("token", encryptedToken);
-        console.log("本番トークン保存結果:", localStorage.getItem("token"));
-
-        const safeUserData = {
-          id: data.data.user.id,
-          name: data.data.user.name,
-          email: data.data.user.email,
-        };
-        localStorage.setItem("user", JSON.stringify(safeUserData));
-        console.log("ユーザーデータ保存結果:", localStorage.getItem("user"));
+        const returnTo = sessionStorage.getItem("preAuthPath") || "/";
+        router.replace(returnTo);
+        sessionStorage.removeItem("preAuthPath");
       }
-
-      // リダイレクト処理
-      const returnTo = sessionStorage.getItem("preAuthPath") || "/";
-      console.log("リダイレクト先:", returnTo);
-      router.replace(returnTo);
-      sessionStorage.removeItem("preAuthPath");
     } catch (error) {
       console.error("ログインエラー詳細:", error);
       setErrors({

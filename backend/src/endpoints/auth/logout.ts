@@ -1,4 +1,4 @@
-//backend/src/endpoints/auth/logout.ts
+// backend/src/endpoints/auth/logout.ts
 import { Context } from "hono";
 import { Bindings, ErrorResponse, SuccessResponse } from "../../types/types";
 
@@ -8,8 +8,26 @@ export const logoutHandler = async (
   try {
     const authHeader = c.req.header("Authorization");
 
+    // Authorizationヘッダが完全に存在しない場合のチェックを追加
+    if (!authHeader) {
+      c.status(401);
+      c.header("WWW-Authenticate", "Bearer");
+      c.header("X-Content-Type-Options", "nosniff");
+      return c.json({
+        error: {
+          code: "MISSING_AUTH_HEADER",
+          message: "Authorizationヘッダーが必要です",
+          ...(c.env.ENVIRONMENT === "development" && {
+            meta: {
+              errorMessage: "Authorization header is missing",
+            },
+          }),
+        },
+      } satisfies ErrorResponse);
+    }
+
     // Authorizationヘッダの形式チェック
-    if (!authHeader?.startsWith("Bearer ")) {
+    if (!authHeader.startsWith("Bearer ")) {
       c.status(401);
       c.header("WWW-Authenticate", "Bearer");
       c.header("X-Content-Type-Options", "nosniff");
@@ -19,7 +37,7 @@ export const logoutHandler = async (
           message: "Authorization: Bearer <token> 形式が必要です",
           ...(c.env.ENVIRONMENT === "development" && {
             meta: {
-              errorMessage: "Missing or malformed Authorization header",
+              errorMessage: "Malformed Authorization header",
             },
           }),
         },
@@ -57,6 +75,10 @@ export const logoutHandler = async (
     if (!result.success) {
       throw new Error("Failed to delete session");
     }
+
+    // セッション管理のための追加ヘッダー
+    c.header("Cache-Control", "no-store");
+    c.header("Pragma", "no-cache");
 
     return c.json(
       {

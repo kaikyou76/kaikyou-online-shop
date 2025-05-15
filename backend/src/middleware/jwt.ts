@@ -59,7 +59,7 @@ export async function generateAuthToken(
       .sign(secret);
 
     debugLog("トークン生成成功", { userId, email, expiresIn });
-    return token;
+    return `v1:${token}`; // プレフィックスを付与して返す
   } catch (error) {
     errorLog(error instanceof Error ? error : new Error(String(error)), {
       userId,
@@ -200,37 +200,49 @@ export const jwtMiddleware: MiddlewareHandler<{
     header: authHeader ? `${authHeader.slice(0, 10)}...` : null,
   });
 
-  if (!authHeader?.startsWith("Bearer ")) {
-    const error = new Error("Authorizationヘッダーが不正");
+  if (!authHeader) {
+    const error = new Error("Authorizationヘッダーが存在しません");
     errorLog(error, logContext);
-
     c.status(401);
     c.header("WWW-Authenticate", "Bearer");
     return c.json({
       success: false,
       error: {
-        code: "INVALID_AUTH_HEADER",
-        message: "Authorization: Bearer <token> 形式が必要です",
+        code: "MISSING_AUTH_HEADER",
+        message: "Authorizationヘッダーが必要です",
       },
     });
   }
 
-  // 2. トークンの抽出
-  const token = authHeader.split(" ")[1];
-  debugLog("トークン抽出", {
-    token: token.slice(0, 10) + "..." + token.slice(-10),
-  });
-
+  // 2. トークンの抽出と正規化
+  let token: string;
   try {
+    if (authHeader.startsWith("Bearer ")) {
+      token = authHeader.split(" ")[1];
+    } else if (authHeader.startsWith("v1:")) {
+      token = authHeader;
+    } else {
+      throw new Error("サポートされていない認証形式");
+    }
+
+    // v1:プレフィックスの処理（Cloudflare Workers対応）
+    const normalizedToken = token.startsWith("v1:") ? token.slice(3) : token;
+    debugLog("トークン正規化完了", {
+      original: token.slice(0, 10) + "..." + token.slice(-10),
+      normalized:
+        normalizedToken.slice(0, 10) + "..." + normalizedToken.slice(-10),
+    });
+
     // 3. トークン検証
     debugLog("トークン検証開始", logContext);
     const { payload } = await jwtVerify(
-      token,
+      normalizedToken,
       new TextEncoder().encode(c.env.JWT_SECRET),
       {
         issuer: c.env.JWT_ISSUER,
         audience: c.env.JWT_AUDIENCE,
         algorithms: ["HS256"],
+        clockTolerance: 15, // 15秒の許容誤差
       }
     );
 
@@ -262,7 +274,9 @@ export const jwtMiddleware: MiddlewareHandler<{
     const err = error instanceof Error ? error : new Error(String(error));
     errorLog(err, {
       ...logContext,
-      token: token.slice(0, 10) + "..." + token.slice(-10),
+      token: token
+        ? token.slice(0, 10) + "..." + token.slice(-10)
+        : "undefined",
     });
 
     c.status(401);

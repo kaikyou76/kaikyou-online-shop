@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRedirectIfNotLoggedIn } from "../hooks/useRedirectIfNotLoggedIn";
 
 type Product = {
   id: number;
@@ -10,6 +11,7 @@ type Product = {
 };
 
 export default function Home() {
+  useRedirectIfNotLoggedIn();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +23,13 @@ export default function Home() {
         setError(null);
 
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/products`
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/products`,
+          {
+            credentials: "include", // Cookieを送信するために必須
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
         );
 
         if (!res.ok) {

@@ -1,3 +1,4 @@
+// frontend/app/register/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -23,6 +24,7 @@ export default function RegisterPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, name, password }),
+          credentials: "include", // Cookieを受け取るために追加
         }
       );
 

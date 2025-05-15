@@ -1,3 +1,5 @@
+// frontend/app/product/[id]/page.tsx
+import { cookies } from "next/headers";
 import {
   StarIcon,
   ShoppingCartIcon,
@@ -5,6 +7,7 @@ import {
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import ProductImage from "../../../components/ProductImage";
+import { AddToCartButton } from "../../../components/AddToCartButton";
 
 type Product = {
   id: number;
@@ -23,6 +26,7 @@ async function getProduct(id: string): Promise<Product | null> {
       process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8787";
     const res = await fetch(`${baseUrl}/api/products/${id}`, {
       next: { revalidate: 60 },
+      credentials: "include",
     });
     if (!res.ok) return null;
     return await res.json();
@@ -35,10 +39,10 @@ async function getProduct(id: string): Promise<Product | null> {
 export default async function ProductDetail({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }) {
-  const resolvedParams = await params;
-  const product = await getProduct(resolvedParams.id);
+  const product = await getProduct(params.id);
+  const sessionCookie = cookies().get("session");
 
   const getPlaceholderImage = (id: number) => {
     const imageIndex = (id % 5) + 1;
@@ -83,8 +87,10 @@ export default async function ProductDetail({
           </Link>
         </div>
 
+        {/* 商品メイン情報 */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden">
           <div className="md:flex">
+            {/* 商品画像 */}
             <div className="md:w-1/2 p-6">
               <div className="relative aspect-square overflow-hidden rounded-lg">
                 <ProductImage
@@ -102,6 +108,7 @@ export default async function ProductDetail({
               </div>
             </div>
 
+            {/* 商品詳細 */}
             <div className="md:w-1/2 p-6 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -139,23 +146,19 @@ export default async function ProductDetail({
                 </p>
               </div>
 
+              {/* カート追加ボタン */}
               <div className="mt-6 space-y-4">
-                <button
-                  disabled={product.stock <= 0}
-                  className={`w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white ${
-                    product.stock > 0
-                      ? "bg-indigo-600 hover:bg-indigo-700"
-                      : "bg-gray-400 cursor-not-allowed"
-                  } md:py-4 md:text-lg md:px-10 transition`}
-                >
-                  <ShoppingCartIcon className="h-6 w-6 mr-2" />
-                  {product.stock > 0 ? "カートに追加" : "売り切れ"}
-                </button>
+                <AddToCartButton
+                  productId={product.id}
+                  disabled={product.stock <= 0 || !sessionCookie}
+                  isAuthenticated={!!sessionCookie}
+                />
               </div>
             </div>
           </div>
         </div>
 
+        {/* 追加情報セクション */}
         <div className="mt-12 bg-white dark:bg-gray-800 rounded-xl shadow-md p-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
             商品詳細

@@ -3,38 +3,67 @@
   "name": "backend",
   "main": "src/worker.ts",
   "compatibility_date": "2025-04-18",
+
+  // 全環境で共通の設定
   "kv_namespaces": [
     {
       "binding": "TEST_NAMESPACE",
-      "id": "test-namespace-id"
+      "id": "test-namespace-id",
+      "preview_id": "test-namespace-id" // プレビュー用にも同じIDを使用
     }
   ],
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "shopping-db",
-      "database_id": "d53ad56f-f646-44dc-8dbf-3d2d15d76973",
-      "preview_database_id": "d53ad56f-f646-44dc-8dbf-3d2d15d76973"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "R2_BUCKET",
-      "bucket_name": "dev-bucket",
-      "preview_bucket_name": "preview-bucket"
-    }
-  ],
-  "vars": {
-    "JWT_SECRET": "local_dev_secret_do_not_use_in_prod",
-    "JWT_ISSUER": "kaikyou-shop-dev",
-    "JWT_AUDIENCE": "kaikyou-shop-users-dev",
-    "ENVIRONMENT": "development",
-    "R2_PUBLIC_DOMAIN": "localhost:8787/assets"
-  },
+
+  // 環境固有の設定
   "env": {
+    "development": {
+      "vars": {
+        "JWT_SECRET": "local_dev_secret_do_not_use_in_prod",
+        "JWT_ISSUER": "kaikyou-shop-dev",
+        "JWT_AUDIENCE": "kaikyou-shop-users-dev",
+        "ENVIRONMENT": "development",
+        "R2_PUBLIC_DOMAIN": "localhost:8787/assets"
+      },
+      "r2_buckets": [
+        {
+          "binding": "R2_BUCKET",
+          "bucket_name": "dev-bucket",
+          "preview_bucket_name": "dev-bucket" // 開発環境ではプレビューも同じバケットを使用
+        }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "shopping-db",
+          "database_id": "d53ad56f-f646-44dc-8dbf-3d2d15d76973",
+          "preview_database_id": "d53ad56f-f646-44dc-8dbf-3d2d15d76973"
+        }
+      ]
+    },
+    "preview": {
+      "vars": {
+        "JWT_SECRET": "local_preview_secret_do_not_use_in_prod",
+        "JWT_ISSUER": "kaikyou-shop-preview",
+        "JWT_AUDIENCE": "kaikyou-shop-users-preview",
+        "ENVIRONMENT": "preview",
+        "R2_PUBLIC_DOMAIN": "preview-assets.example.com" // プレビュー用の専用ドメイン
+      },
+      "r2_buckets": [
+        {
+          "binding": "R2_BUCKET",
+          "bucket_name": "preview-bucket"
+        }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "shopping-db",
+          "database_id": "preview-db-id-12345" // プレビュー用の別DB
+        }
+      ]
+    },
     "production": {
       "vars": {
-        "JWT_SECRET": "{{ JWT_SECRET_PRODUCTION }}",
+        "JWT_SECRET": "{{ JWT_SECRET_PRODUCTION }}", // 本番ではシークレットを外部から注入
         "JWT_ISSUER": "kaikyou-shop",
         "JWT_AUDIENCE": "kaikyou-shop-users",
         "ENVIRONMENT": "production",
@@ -50,31 +79,33 @@
         {
           "binding": "DB",
           "database_name": "shopping-db",
-          "database_id": "d53ad56f-f646-44dc-8dbf-3d2d15d76973"
-        }
-      ]
-    },
-    "preview": {
-      "vars": {
-        "JWT_SECRET": "local_preview_secret_do_not_use_in_prod",
-        "JWT_ISSUER": "kaikyou-shop-preview",
-        "JWT_AUDIENCE": "kaikyou-shop-users-preview",
-        "ENVIRONMENT": "preview",
-        "R2_PUBLIC_DOMAIN": "localhost:8787/assets"
-      },
-      "r2_buckets": [
-        {
-          "binding": "R2_BUCKET",
-          "bucket_name": "preview-bucket"
-        }
-      ],
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "shopping-db",
-          "database_id": "d53ad56f-f646-44dc-8dbf-3d2d15d76973"
+          "database_id": "prod-db-id-67890" // 本番用の別DB
         }
       ]
     }
-  }
+  },
+
+  // デフォルト設定（--envを指定しない場合に使用）
+  "vars": {
+    "JWT_SECRET": "local_dev_secret_do_not_use_in_prod",
+    "JWT_ISSUER": "kaikyou-shop-dev",
+    "JWT_AUDIENCE": "kaikyou-shop-users-dev",
+    "ENVIRONMENT": "development",
+    "R2_PUBLIC_DOMAIN": "localhost:8787/assets"
+  },
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "dev-bucket",
+      "preview_bucket_name": "preview-bucket"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "shopping-db",
+      "database_id": "d53ad56f-f646-44dc-8dbf-3d2d15d76973",
+      "preview_database_id": "d53ad56f-f646-44dc-8dbf-3d2d15d76973"
+    }
+  ]
 }
