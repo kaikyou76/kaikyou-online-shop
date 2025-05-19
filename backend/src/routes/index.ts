@@ -11,7 +11,12 @@ import { registerHandler } from "../endpoints/auth/register";
 import { loginHandler } from "../endpoints/auth/login";
 import { logoutHandler } from "../endpoints/auth/logout";
 import { getUserHandler } from "../endpoints/auth/getUser";
-//import { getSessionsHandler } from "../endpoints/auth/getSessionsHandler";
+import { getUsersHandler } from "../endpoints/users/getUsers";
+import { getUserByIdHandler } from "../endpoints/users/getUserById";
+import { updateUserHandler } from "../endpoints/users/updateUser";
+import { deleteUserHandler } from "../endpoints/users/deleteUser";
+import { getSessionsHandler } from "../endpoints/auth/getSessionsHandler";
+import { validateHandler } from "../endpoints/auth/validate";
 //import { changePasswordHandler } from "../endpoints/auth/changePassword";
 
 const app = new Hono<{
@@ -19,20 +24,23 @@ const app = new Hono<{
   Variables: Variables;
 }>();
 
-// 変更点1: ログ出力を構造化
+// ログ出力ミドルウェア（構造化ログを維持）
 app.use("*", async (c, next) => {
   console.log(
     JSON.stringify({
       timestamp: new Date().toISOString(),
       method: c.req.method,
       path: c.req.path,
+      normalizedPath: c.req.path.replace(/\/+/g, "/"), // パス正規化追加
       ip: c.req.header("CF-Connecting-IP"),
+      phase: "request-start",
+      environment: c.env.ENVIRONMENT, // c.envを使用
     })
   );
   await next();
 });
 
-// 変更点2: セキュリティヘッダー追加ミドルウェア
+// セキュリティヘッダー追加ミドルウェア
 app.use("*", async (c, next) => {
   await next();
   c.header("X-Content-Type-Options", "nosniff");
@@ -40,13 +48,13 @@ app.use("*", async (c, next) => {
   c.header("Referrer-Policy", "strict-origin-when-cross-origin");
 });
 
-// ヘルスチェック（変更なし）
+// ヘルスチェック
 app.get("/health", (c) => c.json({ status: "ok" }));
 
-// APIルート (ベースパス /api)（変更なし）
+// APIルート (ベースパス /api)
 const apiRoutes = app.basePath("/api");
 
-// CORS設定（オリジン制限を環境変数から取得するよう変更）
+// CORS設定（オリジン制限を環境変数から取得
 apiRoutes.use("*", async (c, next) => {
   const corsMiddleware = cors({
     origin:
@@ -66,7 +74,6 @@ apiRoutes.use("*", async (c, next) => {
     allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["Content-Length"],
     maxAge: 86400,
-    credentials: true,
   });
   return corsMiddleware(c, next);
 });
@@ -85,36 +92,61 @@ protectedRoutes.post("/logout", logoutHandler);
 protectedRoutes.get("/users/me", getUserHandler);
 protectedRoutes.post("/products", productPostHandler);
 protectedRoutes.get("/cart", getCartHandler);
-//protectedRoutes.get("/sessions", getSessionsHandler);
+protectedRoutes.get("/users", getUsersHandler);
+protectedRoutes.get("/users/:id", getUserByIdHandler);
+protectedRoutes.put("/users/:id", updateUserHandler);
+protectedRoutes.delete("/users/:id", deleteUserHandler);
+protectedRoutes.get("/sessions", getSessionsHandler);
+protectedRoutes.get("/validate", validateHandler);
 //protectedRoutes.put("/users/change-password", changePasswordHandler);
 
-// エラーハンドリング（詳細情報追加）
-app.notFound((c) =>
-  c.json(
+// エラーハンドリング（ログ強化）
+app.notFound((c) => {
+  console.warn(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      status: 404,
+      path: c.req.path,
+      method: c.req.method,
+      message: "Route not found",
+    })
+  );
+
+  return c.json(
     {
       error: "Not Found",
       path: c.req.path,
       method: c.req.method,
     },
     404
-  )
-);
+  );
+});
 
 app.onError((err, c) => {
-  console.error("Error:", {
-    message: err.message,
-    stack: err.stack,
-    url: c.req.url,
-  });
-  const headers = c.req.raw.headers; // 生のHeadersオブジェクト
-  const requestId = headers.get("X-Request-ID");
+  const errorId = Math.random().toString(36).substring(2, 8);
+  console.error(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      errorId,
+      path: c.req.path,
+      method: c.req.method,
+      error: {
+        name: err.name,
+        message: err.message,
+        stack: c.env.ENVIRONMENT === "development" ? err.stack : undefined,
+      },
+      phase: "error-handling",
+    })
+  );
+
+  const headers = c.req.raw.headers;
+  const requestId = headers.get("X-Request-ID") || errorId;
   return c.json(
     {
       error: "Internal Server Error",
       requestId: requestId,
-      ...(c.env.ENVIRONMENT === "development" && {
+      ...(c.env.ENVIRONMENT !== "production" && {
         details: err.message,
-        stack: err.stack,
       }),
     },
     500

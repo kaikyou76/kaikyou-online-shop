@@ -1,7 +1,10 @@
 // frontend/app/layout.tsx
 import "../styles/globals.css";
 import { AuthProvider } from "../components/AuthProvider";
-import NavBar from "../components/NavBar";
+import { NavBar } from "../components/NavBar";
+//import { AuthManager } from "../components/AuthManager";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 export const metadata = {
   title: "Next.js",
@@ -20,7 +23,9 @@ export default function RootLayout({
     <html lang="en">
       <body className="bg-background text-foreground">
         <AuthProvider>
+          {/*<AuthManager /> */}
           <NavBar />
+          <ToastContainer position="bottom-right" autoClose={3000} />
           {children}
         </AuthProvider>
       </body>

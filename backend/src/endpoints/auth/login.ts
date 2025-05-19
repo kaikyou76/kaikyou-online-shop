@@ -6,8 +6,9 @@ import {
   LoginResponseData,
   SuccessResponse,
 } from "../../types/types";
-import { generateAuthToken, verifyPassword } from "../../lib/auth";
+import { generateAuthToken, verifyPassword } from "../../middleware/jwt";
 import { z } from "zod";
+import { nanoid } from "nanoid"; // 追加
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -74,14 +75,39 @@ export const loginHandler = async (
       );
     }
 
-    // トークン生成（JWTのみ）
-    const token = await generateAuthToken(c.env, user.id, user.email);
+    // トークン生成（既存ロジック）
+    const token = await generateAuthToken(
+      c.env,
+      user.id, // userId: number
+      user.email, // email: string
+      user.role, // role: string
+      "2h" // 有効期限
+    );
 
-    // レスポンスでJWTとユーザー情報を返す
+    // === 追加: セッション情報をDBに保存 ===
+    const sessionToken = nanoid(32); // セッション用トークン生成
+    const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(); // 2時間後
+    const userAgent = c.req.header("user-agent") || "unknown";
+    const ipAddress = c.req.header("cf-connecting-ip") || "unknown";
+
+    await c.env.DB.prepare(
+      `INSERT INTO sessions (
+        user_id,
+        session_token,
+        jwt_token,
+        expires_at,
+        user_agent,
+        ip_address
+      ) VALUES (?, ?, ?, ?, ?, ?)`
+    )
+      .bind(user.id, sessionToken, token, expiresAt, userAgent, ipAddress)
+      .run();
+
+    // レスポンス（既存の形式を維持）
     return c.json(
       {
         data: {
-          token, // JWT
+          token, // クライアントにはJWTのみ返す（セッショントークンはHTTP-Only Cookieなど別途設定推奨）
           user: {
             id: user.id,
             name: user.name,

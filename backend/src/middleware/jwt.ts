@@ -46,11 +46,12 @@ export async function generateAuthToken(
   env: Env,
   userId: number,
   email: string,
+  role: string,
   expiresIn = "2h"
 ): Promise<string> {
   try {
     const secret = new TextEncoder().encode(env.JWT_SECRET);
-    const token = await new SignJWT({ user_id: userId, email })
+    const token = await new SignJWT({ user_id: userId, email, role })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuer(env.JWT_ISSUER)
       .setAudience(env.JWT_AUDIENCE)
@@ -177,7 +178,6 @@ export async function verifyPassword(
     return false;
   }
 }
-
 export const jwtMiddleware: MiddlewareHandler<{
   Bindings: Env;
   Variables: {
@@ -185,6 +185,7 @@ export const jwtMiddleware: MiddlewareHandler<{
   };
 }> = async (c, next) => {
   const requestId = Math.random().toString(36).substring(2, 8);
+  const isDev = c.env.ENVIRONMENT === "development";
   const logContext = {
     requestId,
     method: c.req.method,
@@ -192,41 +193,34 @@ export const jwtMiddleware: MiddlewareHandler<{
     env: c.env.ENVIRONMENT,
   };
 
-  debugLog("ミドルウェア開始", logContext);
-
-  // 1. Authorization ヘッダーの検証
-  const authHeader = c.req.header("Authorization");
-  debugLog("認証ヘッダー確認", {
-    header: authHeader ? `${authHeader.slice(0, 10)}...` : null,
-  });
-
-  if (!authHeader) {
-    const error = new Error("Authorizationヘッダーが存在しません");
-    errorLog(error, logContext);
-    c.status(401);
-    c.header("WWW-Authenticate", "Bearer");
-    return c.json({
-      success: false,
-      error: {
-        code: "MISSING_AUTH_HEADER",
-        message: "Authorizationヘッダーが必要です",
-      },
-    });
-  }
-
-  // 2. トークンの抽出と正規化
-  let token: string;
   try {
-    if (authHeader.startsWith("Bearer ")) {
-      token = authHeader.split(" ")[1];
-    } else if (authHeader.startsWith("v1:")) {
-      token = authHeader;
-    } else {
-      throw new Error("サポートされていない認証形式");
+    debugLog("ミドルウェア開始", logContext);
+
+    // 1. Authorization ヘッダーの検証
+    const authHeader = c.req.header("Authorization");
+    debugLog("認証ヘッダー確認", {
+      header: authHeader ? `${authHeader.slice(0, 10)}...` : null,
+    });
+
+    if (!authHeader) {
+      debugLog("認証ヘッダーなし", logContext);
+      return c.json(
+        {
+          error: {
+            code: "MISSING_AUTH_HEADER",
+            message: "Authorizationヘッダーが必要です",
+          },
+        },
+        401
+      );
     }
 
-    // v1:プレフィックスの処理（Cloudflare Workers対応）
+    // 2. トークンの抽出と正規化
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.split(" ")[1]
+      : authHeader;
     const normalizedToken = token.startsWith("v1:") ? token.slice(3) : token;
+
     debugLog("トークン正規化完了", {
       original: token.slice(0, 10) + "..." + token.slice(-10),
       normalized:
@@ -242,53 +236,61 @@ export const jwtMiddleware: MiddlewareHandler<{
         issuer: c.env.JWT_ISSUER,
         audience: c.env.JWT_AUDIENCE,
         algorithms: ["HS256"],
-        clockTolerance: 15, // 15秒の許容誤差
+        clockTolerance: isDev ? 30 : 15, // 開発環境では緩和
       }
     );
 
-    debugLog("トークンペイロード", {
-      user_id: payload.user_id,
-      email: payload.email,
-      exp: payload.exp,
-    });
-
-    // 4. ペイロード検証
-    if (
-      typeof payload.user_id !== "number" ||
-      typeof payload.email !== "string"
-    ) {
-      throw new Error("必須クレームが不足しています");
+    // 4. ペイロードの型変換と検証
+    const userId = Number(payload.user_id);
+    const role = payload.role ? String(payload.role) : "user";
+    if (isNaN(userId)) {
+      debugLog("無効なuser_id形式", {
+        original: payload.user_id,
+        type: typeof payload.user_id,
+      });
+      return c.json(
+        {
+          error: {
+            code: "INVALID_USER_ID",
+            message: "ユーザーIDが不正です",
+          },
+        },
+        400
+      );
     }
 
-    // 5. コンテキストに保存
+    // 5. コンテキストに保存 (型変換済みの値を設定)
     c.set("jwtPayload", {
-      user_id: payload.user_id,
-      email: payload.email,
-      exp: payload.exp,
+      user_id: userId,
+      email: payload.email ? String(payload.email) : "",
+      role,
+      exp: Number(payload.exp),
     });
 
-    debugLog("認証成功", { user_id: payload.user_id });
+    debugLog("認証成功", {
+      user_id: userId,
+      type: typeof userId,
+    });
+
     await next();
     debugLog("ミドルウェア完了", logContext);
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    errorLog(err, {
+    debugLog("認証エラー", {
+      error: error instanceof Error ? error.message : String(error),
       ...logContext,
-      token: token
-        ? token.slice(0, 10) + "..." + token.slice(-10)
-        : "undefined",
     });
 
-    c.status(401);
-    return c.json({
-      success: false,
-      error: {
-        code: "AUTH_FAILURE",
-        message: "認証に失敗しました",
-        ...(c.env.ENVIRONMENT === "development" && {
-          details: err.message,
-        }),
+    return c.json(
+      {
+        error: {
+          code: "AUTH_FAILURE",
+          message: "認証に失敗しました",
+          ...(c.env.ENVIRONMENT === "development" && {
+            details: error instanceof Error ? error.message : String(error),
+          }),
+        },
       },
-    });
+      401
+    );
   }
 };

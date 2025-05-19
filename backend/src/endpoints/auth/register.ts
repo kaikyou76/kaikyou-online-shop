@@ -1,7 +1,7 @@
 //backend/src/endpoints/auth/register.ts
 import { Context } from "hono";
 import { Bindings, ErrorResponse, SuccessResponse } from "../../types/types";
-import { hashPassword } from "../../lib/auth";
+import { hashPassword } from "../../middleware/jwt";
 import { z } from "zod";
 
 const registerSchema = z.object({
@@ -38,7 +38,7 @@ export const registerHandler = async (
     }
 
     const { name, email, password } = validationResult.data;
-    const passwordHash = await hashPassword(password);
+    const passwordHash = await hashPassword(password, c.env);
 
     // メールアドレスの重複チェック
     const existingUser = await c.env.DB.prepare(

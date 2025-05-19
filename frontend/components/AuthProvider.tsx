@@ -1,31 +1,35 @@
-// frontend/components/AuthProvider.tsx
+// frontend/components/AuthProvider.tsx (統合版)
 "use client";
 
 import {
   createContext,
   useContext,
-  useState,
   useEffect,
+  useState,
   ReactNode,
   useCallback,
   useRef,
 } from "react";
 import { useRouter } from "next/navigation";
 
+type Role = "user" | "admin";
+
 interface User {
   id: number;
-  name: string;
   email: string;
-  role: string;
+  name: string;
+  role: Role;
 }
 
 interface AuthContextType {
+  currentUser: User | null;
   isLoggedIn: boolean;
   isLoading: boolean;
-  currentUser: User | null;
   clearAuth: () => void;
   checkAuth: () => Promise<void>;
   logout: () => Promise<void>;
+  handleLoginSuccess: (token: string, user: User) => Promise<void>;
+  updateAuthState: (user: User | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -36,25 +40,74 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const router = useRouter();
   const authCheckRef = useRef<Promise<void> | null>(null);
+  const initialCheckDone = useRef(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (!apiUrl) throw new Error("APIエンドポイントが設定されていません");
 
+  // 認証状態更新と自動リダイレクト
+  const updateAuthState = useCallback(
+    (user: User | null) => {
+      console.log("[AUTH] 認証状態更新", user);
+      setIsLoggedIn(!!user);
+      setCurrentUser(user);
+      setIsLoading(false);
+
+      if (user && ["/login", "/register"].includes(window.location.pathname)) {
+        console.log("[AUTH] 認証済みユーザーをホームにリダイレクト");
+        router.push("/");
+      }
+    },
+    [router]
+  );
+
+  // 認証情報クリア
   const clearAuth = useCallback(() => {
-    console.log("認証情報をクリア");
+    console.log("[AUTH] 認証情報をクリア");
     localStorage.removeItem("jwtToken");
     localStorage.removeItem("user");
-    setIsLoggedIn(false);
-    setCurrentUser(null);
-  }, []);
+    updateAuthState(null);
+  }, [updateAuthState]);
 
+  // ログイン成功処理
+  const handleLoginSuccess = useCallback(
+    async (token: string, user: User) => {
+      console.log("[AUTH] ログイン成功処理開始");
+      localStorage.setItem("jwtToken", token);
+      localStorage.setItem("user", JSON.stringify(user));
+
+      try {
+        const response = await fetch(`${apiUrl}/api/users/me`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+        });
+
+        if (!response.ok) throw new Error("認証チェックに失敗しました");
+
+        const verifiedUser = await response.json();
+        updateAuthState(verifiedUser);
+        console.log("[AUTH] サーバーサイド認証確認済み");
+      } catch (error) {
+        console.error("認証チェックエラー:", error);
+        clearAuth();
+        throw error;
+      }
+    },
+    [apiUrl, clearAuth, updateAuthState]
+  );
+
+  // 認証チェック
   const checkAuth = useCallback(
     async (initialCheck = false) => {
-      if (authCheckRef.current) {
-        return authCheckRef.current;
-      }
+      if (authCheckRef.current) return authCheckRef.current;
 
-      console.log("認証チェック開始", { initialCheck });
+      console.groupCollapsed(
+        `[AUTH] 認証チェック開始 (initial: ${initialCheck})`
+      );
       setIsLoading(true);
 
       const authCheckPromise = (async () => {
@@ -63,19 +116,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const storedUser = localStorage.getItem("user");
 
           if (!token || !storedUser) {
-            throw new Error("認証情報がありません");
+            console.log("[AUTH] 認証情報なし");
+            updateAuthState(null);
+            return;
           }
 
-          // トークンの有効期限チェック
+          // トークン検証
           const payload = JSON.parse(atob(token.split(".")[1]));
           if (payload.exp * 1000 < Date.now()) {
-            throw new Error("トークンの有効期限が切れています");
+            throw new Error("トークンの有効期限切れ");
           }
-
-          // 即時UI更新のためにローカルデータを使用
-          const user = JSON.parse(storedUser);
-          setCurrentUser(user);
-          setIsLoggedIn(true);
 
           // サーバーサイド認証チェック
           const response = await fetch(`${apiUrl}/api/users/me`, {
@@ -84,144 +134,98 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
             },
-            credentials: "include",
             cache: "no-store",
           });
 
-          if (!response.ok) {
-            throw new Error("認証が必要です");
-          }
+          if (!response.ok) throw new Error(`認証エラー (${response.status})`);
 
           const userData = await response.json();
           localStorage.setItem("user", JSON.stringify(userData));
-          setCurrentUser(userData);
-          setIsLoggedIn(true); // 明示的に状態を更新
+          updateAuthState(userData);
 
-          // 初期チェック時のみリダイレクト処理
-          if (initialCheck) {
+          if (initialCheck && !initialCheckDone.current) {
+            initialCheckDone.current = true;
             const currentPath = window.location.pathname;
-            if (currentPath === "/login" || currentPath === "/register") {
+            if (["/login", "/register"].includes(currentPath)) {
               router.push("/");
             }
           }
         } catch (error) {
-          console.error("認証チェックエラー:", error);
+          console.error("[AUTH] 認証チェックエラー:", error);
           clearAuth();
-          if (initialCheck && window.location.pathname !== "/login") {
-            router.push("/login");
+          if (initialCheck && !initialCheckDone.current) {
+            initialCheckDone.current = true;
+            if (!["/login", "/register"].includes(window.location.pathname)) {
+              router.push("/login");
+            }
           }
         } finally {
-          setIsLoading(false);
           authCheckRef.current = null;
+          console.groupEnd();
         }
       })();
 
       authCheckRef.current = authCheckPromise;
       return authCheckPromise;
     },
-    [apiUrl, clearAuth, router]
+    [apiUrl, clearAuth, router, updateAuthState]
   );
 
+  // ログアウト処理
   const logout = useCallback(async () => {
     setIsLoading(true);
     try {
       const token = localStorage.getItem("jwtToken");
+      if (!token) return clearAuth();
 
-      if (!token) {
-        console.warn(
-          "ログアウト: トークンが存在しないためローカルクリアのみ実行"
-        );
-        clearAuth();
-        router.push("/login");
-        return;
-      }
-
-      // トークンの基本検証
-      try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
-        if (payload.exp * 1000 < Date.now()) {
-          console.warn("ログアウト: トークン有効期限切れ");
-          clearAuth();
-          router.push("/login");
-          return;
-        }
-      } catch (e) {
-        console.error("トークン解析エラー:", e);
-        clearAuth();
-        router.push("/login");
-        return;
-      }
-
-      const response = await fetch(`${apiUrl}/api/logout`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      });
-
-      // 401エラーでもクリア処理は実行
-      if (response.status === 401) {
-        console.warn("サーバー側で認証無効と判定");
-      } else if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("ログアウト失敗詳細:", {
-          status: response.status,
-          error: errorData,
+      // トークン検証
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      if (payload.exp * 1000 >= Date.now()) {
+        await fetch(`${apiUrl}/api/logout`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
         });
-        throw new Error(`ログアウトに失敗しました: ${response.status}`);
       }
-
-      console.log("ログアウト成功");
-      clearAuth();
-      router.push("/login");
-    } catch (error) {
-      console.error("ログアウト処理中に例外発生:", error);
-      clearAuth();
-      router.push("/login");
     } finally {
+      clearAuth();
+      router.push("/login");
       setIsLoading(false);
     }
   }, [apiUrl, clearAuth, router]);
 
+  // 初回認証チェック
   useEffect(() => {
-    // 初回のみ実行
-    let mounted = true;
     const initialCheck = async () => {
-      await checkAuth(true);
+      try {
+        await checkAuth(true);
+      } catch (error) {
+        console.error("[AUTH] 初回認証チェックエラー:", error);
+      }
     };
-
-    if (mounted) {
-      initialCheck();
-    }
-
-    return () => {
-      mounted = false;
-    };
+    initialCheck();
   }, [checkAuth]);
 
+  // ストレージイベント監視
   useEffect(() => {
-    // localStorageの変更を監視
-    const handleStorageChange = () => {
-      checkAuth();
-    };
-
+    const handleStorageChange = () => checkAuth();
     window.addEventListener("storage", handleStorageChange);
-    return () => {
-      window.removeEventListener("storage", handleStorageChange);
-    };
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, [checkAuth]);
 
   return (
     <AuthContext.Provider
       value={{
+        currentUser,
         isLoggedIn,
         isLoading,
-        currentUser,
         clearAuth,
         checkAuth,
         logout,
+        handleLoginSuccess,
+        updateAuthState,
       }}
     >
       {children}
@@ -231,8 +235,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within AuthProvider");
   return context;
 };

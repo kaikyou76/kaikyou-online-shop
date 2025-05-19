@@ -1,14 +1,13 @@
-//backend/src/types/types.ts
+// backend/src/types/types.ts
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { z } from "zod";
 import { productSchema } from "@/schemas/product";
 
-//エラーコードを定義
+// エラーコードを定義
 export const INVALID_SESSION = "INVALID_SESSION";
 
 /**
  * Cloudflare Worker にバインドされる環境変数
- * （wrangler.toml の [vars] や D1データベースなど）
  */
 export interface Env {
   DB: D1Database;
@@ -36,6 +35,7 @@ export interface JwtPayload {
   iat?: number;
   iss?: string;
   aud?: string | string[];
+  role?: string;
 }
 
 /**
@@ -48,7 +48,6 @@ export interface Variables {
 
 /**
  * カート内の商品1件のデータ型
- * API レスポンス用に追加情報フィールドを含む
  */
 export interface CartItem {
   id: number;
@@ -57,38 +56,61 @@ export interface CartItem {
   session_id: string | null;
   quantity: number;
   created_at: string;
+  subtotal?: number;
+  name?: string;
+  price?: number;
+  image_url?: string;
+}
 
-  // ===== 計算・表示用フィールド（レスポンス用） =====
-  subtotal?: number; // = price × quantity
-  name?: string; // 商品名
-  price?: number; // 単価
-  image_url?: string; // 商品画像URL
+// ================== エラーレスポンス関連 ==================
+
+/**
+ * エラーの基本構造
+ */
+interface ErrorBase {
+  code: string;
+  message: string;
+  solution?: string;
+  meta?: {
+    errorMessage?: string;
+    required?: string[];
+    received?: Record<string, unknown>;
+  };
+  issues?: Array<{
+    path: (string | number)[];
+    message: string;
+  }>;
 }
 
 /**
- * エラーレスポンスの統一フォーマット
+ * 汎用エラーレスポンス
  */
-export interface ErrorResponse {
-  error: {
-    code: string;
-    message: string;
-    details?: z.typeToFlattenedError<z.infer<typeof productSchema>>; // Zodエラー
-    meta?: {
-      // 独自の情報
-      errorMessage?: string;
-      required?: string[];
-      received?: Record<string, boolean>;
-    };
-    issues?: Array<{
-      path: (string | number)[];
-      message: string;
-    }>;
-    solution?: string;
+export interface ErrorResponse<T = unknown> {
+  error: ErrorBase & {
+    details?: T;
   };
 }
 
 /**
- * 成功レスポンスの統一フォーマット（汎用ジェネリック）
+ * Zodバリデーションエラーの型ユーティリティ
+ */
+export type ZodFlattenedError<T extends z.ZodTypeAny> = z.typeToFlattenedError<
+  z.infer<T>
+>;
+
+/**
+ * 商品関連のエラーレスポンス
+ */
+export interface ProductErrorResponse {
+  error: ErrorBase & {
+    details: ZodFlattenedError<typeof productSchema>;
+  };
+}
+
+// ================== 成功レスポンス関連 ==================
+
+/**
+ * 成功レスポンスの基本型
  */
 export interface SuccessResponse<T = unknown> {
   data: T;
@@ -96,34 +118,19 @@ export interface SuccessResponse<T = unknown> {
     page?: number;
     per_page?: number;
     total?: number;
+    total_pages?: number;
   };
 }
 
 export interface LoginResponseData {
   token: string;
-  refreshToken?: string; // オプショナル追加
+  refreshToken?: string;
   user: {
     id: number;
     name: string;
     email: string;
     role: string;
   };
-}
-
-/**
- * Hono の Context に拡張変数を型として登録
- * ctx.get('jwtPayload') などの補完が効くようになる
- */
-declare module "hono" {
-  interface ContextVariableMap {
-    jwtPayload?: JwtPayload; // 認証オプショナルに統一
-  }
-}
-
-// ストレージ関連の型（必要に応じて拡張）
-export interface StorageConfig {
-  folder?: string;
-  maxFileSize?: number;
 }
 
 export interface ProductCreateResponse {
@@ -139,4 +146,22 @@ export interface ProductCreateResponse {
     };
     createdAt: string;
   };
+}
+
+// ================== Hono拡張 ==================
+/**
+ * Hono の Context に拡張変数を型として登録
+ * ctx.get('jwtPayload') などの補完が効くようになる
+ */
+declare module "hono" {
+  interface ContextVariableMap {
+    jwtPayload?: JwtPayload; // 認証オプショナルに統一
+  }
+}
+
+// ================== ストレージ関連 ==================
+// ストレージ関連の型（必要に応じて拡張）
+export interface StorageConfig {
+  folder?: string;
+  maxFileSize?: number;
 }

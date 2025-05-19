@@ -1,11 +1,12 @@
-// frontend/app/login/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "../../components/AuthProvider";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { isLoggedIn, handleLoginSuccess, isLoading: authLoading } = useAuth(); // checkAuthをhandleLoginSuccessに変更
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -16,12 +17,15 @@ export default function LoginPage() {
     global?: string;
   }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
-    return () => setIsMounted(false);
-  }, []);
+    if (!authLoading && isLoggedIn) {
+      const returnTo = sessionStorage.getItem("preAuthPath") || "/";
+      sessionStorage.removeItem("preAuthPath");
+      router.replace(returnTo);
+    }
+  }, [isLoggedIn, authLoading, router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -52,9 +56,10 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isMounted || !validateForm()) return;
+    if (!validateForm()) return;
     setIsSubmitting(true);
     setErrors({});
+
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
       if (!apiUrl) throw new Error("APIエンドポイントが設定されていません");
@@ -65,33 +70,24 @@ export default function LoginPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(formData),
-        credentials: "include",
       });
 
       if (!response.ok) {
-        const data = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(
-          data?.message || `ログインに失敗しました (HTTP ${response.status})`
+          errorData?.message ||
+            `ログインに失敗しました (HTTP ${response.status})`
         );
       }
 
       const { data } = await response.json();
       if (data?.token) {
-        localStorage.setItem("jwtToken", data.token);
-        localStorage.setItem("user", JSON.stringify(data.user));
-
-        // AuthProviderに状態更新を通知
-        window.dispatchEvent(new Event("storage"));
-
-        // 状態更新が確実に行われるように少し待機
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
+        await handleLoginSuccess(data.token, data.user);
         const returnTo = sessionStorage.getItem("preAuthPath") || "/";
         router.replace(returnTo);
-        sessionStorage.removeItem("preAuthPath");
       }
     } catch (error) {
-      console.error("ログインエラー詳細:", error);
+      console.error("ログインエラー:", error);
       setErrors({
         global:
           error instanceof Error
@@ -99,13 +95,9 @@ export default function LoginPage() {
             : "ログイン処理中にエラーが発生しました",
       });
     } finally {
-      if (isMounted) {
-        setIsSubmitting(false);
-      }
+      setIsSubmitting(false);
     }
   };
-
-  const [showPassword, setShowPassword] = useState(false);
 
   return (
     <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50">

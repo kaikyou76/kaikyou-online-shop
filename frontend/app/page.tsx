@@ -1,22 +1,36 @@
+// frontend/app/page.tsx
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRedirectIfNotLoggedIn } from "../hooks/useRedirectIfNotLoggedIn";
+import { useAuth } from "../components/AuthProvider";
+import { useRouter } from "next/navigation";
 
 type Product = {
   id: number;
   name: string;
   price: number;
-  stock: number; // 在庫情報を追加
+  stock: number;
 };
 
 export default function Home() {
-  useRedirectIfNotLoggedIn();
+  const { isLoggedIn, isLoading: authLoading } = useAuth();
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 認証状態に基づくリダイレクト処理
   useEffect(() => {
+    if (!authLoading && !isLoggedIn) {
+      console.log("[PAGE] 未認証ユーザーをリダイレクト");
+      router.push("/login");
+    }
+  }, [isLoggedIn, authLoading, router]);
+
+  // 商品データ取得
+  useEffect(() => {
+    if (authLoading || !isLoggedIn) return;
+
     const fetchProducts = async () => {
       try {
         setIsLoading(true);
@@ -25,7 +39,6 @@ export default function Home() {
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/products`,
           {
-            credentials: "include", // Cookieを送信するために必須
             headers: {
               "Content-Type": "application/json",
             },
@@ -53,7 +66,17 @@ export default function Home() {
     };
 
     fetchProducts();
-  }, []);
+  }, [authLoading, isLoggedIn]);
+
+  // 認証チェック中は何も表示しない
+  if (authLoading) {
+    return null;
+  }
+
+  // 未認証状態であればここまで来ない（リダイレクトされる）
+  if (!isLoggedIn) {
+    return null;
+  }
 
   if (isLoading) {
     return (
