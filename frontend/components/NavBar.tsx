@@ -51,7 +51,11 @@ export const NavBar = () => {
           </AuthButton>
 
           {/* 管理者のみ表示されるボタン例 */}
-          <AuthButton href="/admin" requiredRole="admin" className="bg-red-50">
+          <AuthButton
+            href="/admin-center"
+            requiredRole="admin"
+            className="bg-red-50"
+          >
             Admin Panel
           </AuthButton>
         </ul>

@@ -88,7 +88,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         if (!response.ok) throw new Error("認証チェックに失敗しました");
 
-        const verifiedUser = await response.json();
+        const { data: verifiedUser } = await response.json();
         updateAuthState(verifiedUser);
         console.log("[AUTH] サーバーサイド認証確認済み");
       } catch (error) {
@@ -139,7 +139,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
           if (!response.ok) throw new Error(`認証エラー (${response.status})`);
 
-          const userData = await response.json();
+          const { data: userData } = await response.json();
           localStorage.setItem("user", JSON.stringify(userData));
           updateAuthState(userData);
 
