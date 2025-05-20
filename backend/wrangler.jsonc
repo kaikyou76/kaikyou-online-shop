@@ -7,7 +7,7 @@
   // Observability 設定
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 0.01
+    "head_sampling_rate": 1
   },
 
   // 共通設定
