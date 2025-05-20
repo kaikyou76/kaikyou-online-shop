@@ -9,13 +9,19 @@ import Link from "next/link";
 import ProductImage from "../../../components/ProductImage";
 import { AddToCartButton } from "../../../components/AddToCartButton";
 
+type ProductImage = {
+  image_url: string;
+  alt_text?: string;
+  is_main: boolean; // NOT NULL なので必須
+};
+
 type Product = {
   id: number;
   name: string;
   description: string;
   price: number;
   stock: number;
-  image_url?: string;
+  images?: ProductImage[];
   rating?: number;
   category?: string;
 };
@@ -28,8 +34,15 @@ async function getProduct(id: string): Promise<Product | null> {
       next: { revalidate: 60 },
       credentials: "include",
     });
-    if (!res.ok) return null;
-    return await res.json();
+
+    if (!res.ok) {
+      console.error(`API Error: ${res.status} ${res.statusText}`);
+      return null;
+    }
+
+    const data = await res.json();
+    console.log("API Response:", data); // デバッグ用
+    return data;
   } catch (error) {
     console.error("商品取得エラー:", error);
     return null;
@@ -73,6 +86,13 @@ export default async function ProductDetail({
     );
   }
 
+  // 画像データの安全な取得
+  const images = product.images || [];
+  const mainImage =
+    images.find((img) => img.is_main)?.image_url ||
+    getPlaceholderImage(product.id);
+  const additionalImages = images.filter((img) => !img.is_main);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
@@ -90,15 +110,14 @@ export default async function ProductDetail({
         {/* 商品メイン情報 */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden">
           <div className="md:flex">
-            {/* 商品画像 */}
+            {/* 商品画像セクション */}
             <div className="md:w-1/2 p-6">
               <div className="relative aspect-square overflow-hidden rounded-lg">
                 <ProductImage
                   id={product.id}
-                  imageUrl={
-                    product.image_url || getPlaceholderImage(product.id)
-                  }
+                  imageUrl={mainImage}
                   alt={product.name}
+                  className="w-full h-full object-cover"
                 />
                 {product.stock <= 0 && (
                   <div className="absolute top-4 right-4 bg-red-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
@@ -106,9 +125,28 @@ export default async function ProductDetail({
                   </div>
                 )}
               </div>
+
+              {/* 追加画像ギャラリー */}
+              {additionalImages.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mt-4">
+                  {additionalImages.map((img, index) => (
+                    <div
+                      key={index}
+                      className="relative aspect-square overflow-hidden rounded-lg"
+                    >
+                      <ProductImage
+                        id={product.id}
+                        imageUrl={img.image_url}
+                        alt={`${product.name} 追加画像 ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* 商品詳細 */}
+            {/* 商品詳細情報 */}
             <div className="md:w-1/2 p-6 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -146,7 +184,7 @@ export default async function ProductDetail({
                 </p>
               </div>
 
-              {/* カート追加ボタン */}
+              {/* カート操作ボタン */}
               <div className="mt-6 space-y-4">
                 <AddToCartButton
                   productId={product.id}
@@ -158,7 +196,7 @@ export default async function ProductDetail({
           </div>
         </div>
 
-        {/* 追加情報セクション */}
+        {/* 商品詳細スペック */}
         <div className="mt-12 bg-white dark:bg-gray-800 rounded-xl shadow-md p-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
             商品詳細

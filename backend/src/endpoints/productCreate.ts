@@ -128,6 +128,23 @@ export const productPostHandler = async (
       );
     }
 
+    // デバッグ用ログ: アップロード結果を出力
+    console.log("Main Image Upload Result:", {
+      url: mainImage.url,
+      size: mainImageFile?.size,
+      type: mainImageFile?.type,
+      folder: "products/main",
+    });
+    console.log(
+      "Additional Images Upload Results:",
+      additionalImages.map((img, index) => ({
+        url: img.url,
+        size: additionalImageFiles[index]?.size,
+        type: additionalImageFiles[index]?.type,
+        folder: "products/additional",
+      }))
+    );
+
     // レスポンス (元のコードを維持)
     return c.json(
       {
