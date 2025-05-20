@@ -13,6 +13,7 @@ export const productPostHandler = async (
   c: Context<{ Bindings: Bindings; Variables: { jwtPayload?: JwtPayload } }>
 ): Promise<Response> => {
   try {
+    console.log("Received form data:", await c.req.formData()); // デバッグ用ログ
     // 認証チェック (追加部分)
     const payload = c.get("jwtPayload");
     if (!payload || payload.role !== "admin") {

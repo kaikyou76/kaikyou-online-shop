@@ -206,10 +206,19 @@ export default function ProductCreatePage() {
         formDataToSend.append("additionalImages", file)
       );
 
+      const token = localStorage.getItem("jwtToken");
+      if (!token) {
+        router.push("/login?returnUrl=/product/create");
+        return;
+      }
+
       // APIリクエスト
       const response = await fetch(`${apiUrl}/api/products`, {
         method: "POST",
         body: formDataToSend,
+        headers: {
+          Authorization: `Bearer ${token}`, // 認証ヘッダー追加
+        },
       });
 
       if (!response.ok) {

@@ -4,6 +4,12 @@
   "main": "src/worker.ts",
   "compatibility_date": "2025-04-18",
 
+  // Observability 設定
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.01
+  },
+
   // 共通設定
   "kv_namespaces": [
     {
