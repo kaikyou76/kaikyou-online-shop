@@ -91,12 +91,12 @@ export const productPostHandler = async (
       ),
     ]);
 
-    // DB操作 (元のコードを維持)
+    // DB操作 (修正部分)
     const productInsert = await c.env.DB.prepare(
       `INSERT INTO products (
-          name, description, price, stock, category_id, 
-          main_image_url, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id;`
+      name, description, price, stock, category_id, 
+      created_at
+    ) VALUES (?, ?, ?, ?, ?, ?) RETURNING id;`
     )
       .bind(
         validationResult.data.name,
@@ -104,10 +104,16 @@ export const productPostHandler = async (
         validationResult.data.price,
         validationResult.data.stock,
         validationResult.data.category_id,
-        mainImage.url,
         new Date().toISOString()
       )
       .first<{ id: number }>();
+
+    // メイン画像登録 (追加部分)
+    await c.env.DB.prepare(
+      `INSERT INTO product_images (
+      product_id, image_url, is_main, created_at
+    ) VALUES (?, ?, ?, ?)`
+    ).bind(productInsert.id, mainImage.url, true, new Date().toISOString());
 
     // 追加画像登録 (元のコードを維持)
     if (additionalImages.length > 0) {
@@ -115,9 +121,9 @@ export const productPostHandler = async (
         additionalImages.map((img) =>
           c.env.DB.prepare(
             `INSERT INTO product_images (
-                product_id, image_url, created_at
-              ) VALUES (?, ?, ?)`
-          ).bind(productInsert.id, img.url, new Date().toISOString())
+            product_id, image_url, is_main, created_at
+          ) VALUES (?, ?, ?, ?)`
+          ).bind(productInsert.id, img.url, false, new Date().toISOString())
         )
       );
     }
