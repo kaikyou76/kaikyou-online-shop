@@ -110,7 +110,7 @@ export const productPostHandler = async (
 
     // メイン画像登録 (追加部分)
     await c.env.DB.prepare(
-      `INSERT INTO product_images (
+      `INSERT INTO images (
       product_id, image_url, is_main, created_at
     ) VALUES (?, ?, ?, ?)`
     ).bind(productInsert.id, mainImage.url, true, new Date().toISOString());
@@ -120,7 +120,7 @@ export const productPostHandler = async (
       await c.env.DB.batch(
         additionalImages.map((img) =>
           c.env.DB.prepare(
-            `INSERT INTO product_images (
+            `INSERT INTO images (
             product_id, image_url, is_main, created_at
           ) VALUES (?, ?, ?, ?)`
           ).bind(productInsert.id, img.url, false, new Date().toISOString())
