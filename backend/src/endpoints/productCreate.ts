@@ -12,9 +12,12 @@ import { uploadToR2 } from "../lib/storage";
 export const productPostHandler = async (
   c: Context<{ Bindings: Bindings; Variables: { jwtPayload?: JwtPayload } }>
 ): Promise<Response> => {
+  const db = c.env.DB;
+
   try {
-    console.log("Received form data:", await c.req.formData()); // デバッグ用ログ
-    // 認証チェック (追加部分)
+    console.log("Received form data:", await c.req.formData());
+
+    // 認証チェック
     const payload = c.get("jwtPayload");
     if (!payload || payload.role !== "admin") {
       return c.json(
@@ -32,7 +35,7 @@ export const productPostHandler = async (
 
     const formData = await c.req.formData();
 
-    // フォームデータの前処理 (元のコードを維持)
+    // フォームデータの前処理
     const rawFormData = {
       name: formData.get("name"),
       description: formData.get("description"),
@@ -41,7 +44,7 @@ export const productPostHandler = async (
       category_id: formData.get("category_id"),
     };
 
-    // バリデーション (元のコードを維持)
+    // バリデーション
     const validationResult = productSchema.safeParse(rawFormData);
     if (!validationResult.success) {
       return c.json(
@@ -75,7 +78,7 @@ export const productPostHandler = async (
       );
     }
 
-    // R2アップロード (元のコードを維持)
+    // R2アップロード
     const [mainImage, additionalImages] = await Promise.all([
       uploadToR2(c.env.R2_BUCKET, mainImageFile, c.env.R2_PUBLIC_DOMAIN, {
         folder: "products/main",
@@ -91,13 +94,14 @@ export const productPostHandler = async (
       ),
     ]);
 
-    // DB操作 (修正部分)
-    const productInsert = await c.env.DB.prepare(
-      `INSERT INTO products (
-      name, description, price, stock, category_id, 
-      created_at
-    ) VALUES (?, ?, ?, ?, ?, ?) RETURNING id;`
-    )
+    // 商品情報挿入
+    const productInsert = await db
+      .prepare(
+        `INSERT INTO products (
+          name, description, price, stock, category_id, 
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?) RETURNING id;`
+      )
       .bind(
         validationResult.data.name,
         validationResult.data.description,
@@ -108,27 +112,46 @@ export const productPostHandler = async (
       )
       .first<{ id: number }>();
 
-    // メイン画像登録 (追加部分)
-    await c.env.DB.prepare(
-      `INSERT INTO images (
-      product_id, image_url, is_main, created_at
-    ) VALUES (?, ?, ?, ?)`
-    ).bind(productInsert.id, mainImage.url, true, new Date().toISOString());
-
-    // 追加画像登録 (元のコードを維持)
-    if (additionalImages.length > 0) {
-      await c.env.DB.batch(
-        additionalImages.map((img) =>
-          c.env.DB.prepare(
-            `INSERT INTO images (
-            product_id, image_url, is_main, created_at
-          ) VALUES (?, ?, ?, ?)`
-          ).bind(productInsert.id, img.url, false, new Date().toISOString())
-        )
-      );
+    // 商品IDの存在チェック
+    if (!productInsert?.id) {
+      throw new Error("商品IDの取得に失敗しました");
     }
 
-    // デバッグ用ログ: アップロード結果を出力
+    // メイン画像挿入
+    const mainImageInsert = await db
+      .prepare(
+        `INSERT INTO images (
+          product_id, image_url, is_main, created_at
+        ) VALUES (?, ?, ?, ?)`
+      )
+      .bind(productInsert.id, mainImage.url, 1, new Date().toISOString())
+      .run();
+
+    // メイン画像挿入結果チェック
+    if (!mainImageInsert.success) {
+      throw new Error("メイン画像の登録に失敗しました");
+    }
+
+    // 追加画像挿入
+    if (additionalImages.length > 0) {
+      const additionalInserts = await db.batch(
+        additionalImages.map((img) =>
+          db
+            .prepare(
+              `INSERT INTO images (
+                product_id, image_url, is_main, created_at
+              ) VALUES (?, ?, ?, ?)`
+            )
+            .bind(productInsert.id, img.url, 0, new Date().toISOString())
+        )
+      );
+      // 追加画像挿入結果チェック
+      if (additionalInserts.some((result) => !result.success)) {
+        throw new Error("追加画像の登録に失敗しました");
+      }
+    }
+
+    // デバッグログ
     console.log("Main Image Upload Result:", {
       url: mainImage.url,
       size: mainImageFile?.size,
@@ -145,7 +168,7 @@ export const productPostHandler = async (
       }))
     );
 
-    // レスポンス (元のコードを維持)
+    // レスポンス
     return c.json(
       {
         success: true,
@@ -155,8 +178,16 @@ export const productPostHandler = async (
           price: validationResult.data.price,
           stock: validationResult.data.stock,
           images: {
-            main: mainImage.url,
-            additional: additionalImages.map((img) => img.url),
+            main: {
+              url: mainImage.url,
+              is_main: true,
+              uploaded_at: new Date().toISOString(),
+            },
+            additional: additionalImages.map((img) => ({
+              url: img.url,
+              is_main: false,
+              uploaded_at: new Date().toISOString(),
+            })),
           },
           createdAt: new Date().toISOString(),
         },
@@ -169,7 +200,8 @@ export const productPostHandler = async (
       {
         error: {
           code: "INTERNAL_ERROR",
-          message: "処理に失敗しました",
+          message:
+            error instanceof Error ? error.message : "処理に失敗しました",
         },
       } satisfies ErrorResponse,
       500

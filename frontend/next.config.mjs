@@ -1,12 +1,20 @@
-/** @type {import('next').NextConfig} */
+// frontend/next.config.mjs
+const isProduction = process.env.NODE_ENV === "production";
+
 const nextConfig = {
   images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "pub-1713e92651fc463cba099b34f8bf5cb1.r2.dev",
-      },
-    ],
+    remotePatterns:
+      isProduction && process.env.R2_PUBLIC_DOMAIN
+        ? [
+            {
+              protocol: "https",
+              hostname: process.env.R2_PUBLIC_DOMAIN.replace(
+                /^https?:\/\//,
+                ""
+              ),
+            },
+          ]
+        : [],
   },
 };
 

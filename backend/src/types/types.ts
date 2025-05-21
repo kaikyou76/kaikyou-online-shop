@@ -133,6 +133,12 @@ export interface LoginResponseData {
   };
 }
 
+interface ImageResponse {
+  url: string;
+  is_main: boolean;
+  uploaded_at: string;
+}
+
 export interface ProductCreateResponse {
   success: boolean;
   data: {
@@ -141,8 +147,8 @@ export interface ProductCreateResponse {
     price: number;
     stock: number;
     images: {
-      main: string;
-      additional: string[];
+      main: ImageResponse;
+      additional: ImageResponse[];
     };
     createdAt: string;
   };
