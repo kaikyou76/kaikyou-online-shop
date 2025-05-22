@@ -1,0 +1,15 @@
+{
+  "rules": [
+    {
+      "AllowedOrigins": [
+        "https://kaikyou-online-shop.onrender.com",
+        "https://kaikyou-online-shop.vercel.app",
+        "http://localhost:3000"
+      ],
+      "AllowedMethods": ["GET", "POST", "PUT", "DELETE", "HEAD"],
+      "AllowedHeaders": ["Authorization", "Content-Type"],
+      "ExposeHeaders": ["ETag"],
+      "MaxAgeSeconds": 3600
+    }
+  ]
+}

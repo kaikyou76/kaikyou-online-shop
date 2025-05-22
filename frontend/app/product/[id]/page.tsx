@@ -10,9 +10,9 @@ import ProductImage from "../../../components/ProductImage";
 import { AddToCartButton } from "../../../components/AddToCartButton";
 
 type ProductImage = {
-  image_url: string;
-  alt_text?: string;
-  is_main: boolean; // NOT NULL なので必須
+  url: string;
+  is_main: boolean;
+  uploaded_at?: string;
 };
 
 type Product = {
@@ -21,9 +21,13 @@ type Product = {
   description: string;
   price: number;
   stock: number;
-  images?: ProductImage[];
+  images?: {
+    main: ProductImage;
+    additional: ProductImage[];
+  };
   rating?: number;
   category?: string;
+  createdAt: string;
 };
 
 async function getProduct(id: string): Promise<Product | null> {
@@ -32,7 +36,9 @@ async function getProduct(id: string): Promise<Product | null> {
       process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8787";
     const res = await fetch(`${baseUrl}/api/products/${id}`, {
       next: { revalidate: 60 },
-      credentials: "include",
+      headers: {
+        Accept: "application/json", // 明示的にJSONを要求
+      },
     });
 
     if (!res.ok) {
@@ -40,9 +46,27 @@ async function getProduct(id: string): Promise<Product | null> {
       return null;
     }
 
+    // Content-Typeの確認
+    const contentType = res.headers.get("Content-Type");
+    if (!contentType?.includes("application/json")) {
+      console.error("Invalid content type:", contentType);
+      return null;
+    }
+
+    // const data = await res.json();
+    // console.log("API Response:", data.data); // デバッグ用
+
+    // return data.data;
+
     const data = await res.json();
     console.log("API Response:", data); // デバッグ用
+
     return data;
+
+    // レスポンスを直接Product型として扱う
+    // const product: Product = await res.json();
+    // console.log("Parsed Product:", product); // デバッグ用
+    // return product;
   } catch (error) {
     console.error("商品取得エラー:", error);
     return null;
@@ -55,6 +79,8 @@ export default async function ProductDetail({
   params: { id: string };
 }) {
   const product = await getProduct(params.id);
+  console.log("Raw API response:", product);
+  console.log("Main image URL:", product?.images?.main?.url);
   const sessionCookie = cookies().get("session");
 
   const getPlaceholderImage = (id: number) => {
@@ -74,7 +100,7 @@ export default async function ProductDetail({
               お探しの商品は削除されたか、URLが間違っている可能性があります
             </p>
             <Link
-              href="/products"
+              href="/"
               className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
             >
               <ArrowLeftIcon className="h-5 w-5 mr-2" />
@@ -86,12 +112,10 @@ export default async function ProductDetail({
     );
   }
 
-  // 画像データの安全な取得
-  const images = product.images || [];
+  // 画像データの取得
   const mainImage =
-    images.find((img) => img.is_main)?.image_url ||
-    getPlaceholderImage(product.id);
-  const additionalImages = images.filter((img) => !img.is_main);
+    product.images?.main?.url || getPlaceholderImage(product.id);
+  const additionalImages = product.images?.additional || [];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -136,7 +160,7 @@ export default async function ProductDetail({
                     >
                       <ProductImage
                         id={product.id}
-                        imageUrl={img.image_url}
+                        imageUrl={img.url}
                         alt={`${product.name} 追加画像 ${index + 1}`}
                         className="w-full h-full object-cover"
                       />
