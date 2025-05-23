@@ -1,7 +1,7 @@
 // frontend/components/ProductImageUpload.tsx
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Image from "next/image";
 import {
   TrashIcon,
@@ -9,64 +9,33 @@ import {
   ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 
-type ImageObject = {
-  id: string | number;
-  url: string;
-};
-
-type ImageUpdateData = {
-  main?: File | string | ImageObject;
-  additional?: (File | string | ImageObject)[];
-  deleted?: string[];
-};
-
 interface ProductImageUploadProps {
-  value?: ImageUpdateData;
-  onChange?: (data: ImageUpdateData) => void;
-  maxAdditional?: number;
+  mainImage?: string;
+  additionalImages?: string[];
+  onImagesChange: (data: {
+    main?: File | string;
+    additional?: (File | string)[];
+    deleted?: string[];
+  }) => void;
 }
 
 export function ProductImageUpload({
-  value = {},
-  onChange,
-  maxAdditional = 10,
+  mainImage = "",
+  additionalImages = [],
+  onImagesChange,
 }: ProductImageUploadProps) {
-  const [mainImg, setMainImg] = useState<File | string | ImageObject>(
-    value.main || ""
-  );
-  const [additionalImgs, setAdditionalImgs] = useState<
-    (File | string | ImageObject)[]
-  >(value.additional || []);
-  const [deletedImgs, setDeletedImgs] = useState<string[]>(value.deleted || []);
-  const [isDragging, setIsDragging] = useState(false);
+  const [mainImg, setMainImg] = useState<File | string>(mainImage);
+  const [additionalImgs, setAdditionalImgs] =
+    useState<(File | string)[]>(additionalImages);
+  const [deletedImgs, setDeletedImgs] = useState<string[]>([]);
 
-  const generatePreview = useCallback((img: File | string | ImageObject) => {
-    if (typeof img === "string") return img;
-    if (img instanceof File) return URL.createObjectURL(img);
-    return img.url;
-  }, []);
-
-  const mainImgUrl = useMemo(
-    () => generatePreview(mainImg),
-    [mainImg, generatePreview]
-  );
-  const additionalImgUrls = useMemo(
-    () => additionalImgs.map(generatePreview),
-    [additionalImgs, generatePreview]
-  );
-
+  // メイン画像変更ハンドラー
   const handleMainImageChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files?.[0]) {
         const file = e.target.files[0];
         setMainImg((prev) => {
-          if (
-            typeof prev === "object" &&
-            !(prev instanceof File) &&
-            "url" in prev
-          ) {
-            setDeletedImgs((d) => [...d, prev.url]);
-          } else if (typeof prev === "string" && prev) {
+          if (typeof prev === "string" && prev) {
             setDeletedImgs((d) => [...d, prev]);
           }
           return file;
@@ -76,42 +45,30 @@ export function ProductImageUpload({
     []
   );
 
+  // 追加画像変更ハンドラー
   const handleAdditionalImagesChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files?.length) {
-        const newFiles = Array.from(e.target.files).slice(
-          0,
-          maxAdditional - additionalImgs.length
-        );
+        const newFiles = Array.from(e.target.files);
         setAdditionalImgs((prev) => [...prev, ...newFiles]);
       }
     },
-    [additionalImgs.length, maxAdditional]
+    []
   );
 
+  // メイン画像リセット
   const resetMainImage = useCallback(() => {
-    if (
-      typeof mainImg === "object" &&
-      !(mainImg instanceof File) &&
-      "url" in mainImg
-    ) {
-      setDeletedImgs((d) => [...d, mainImg.url]);
-    } else if (typeof mainImg === "string" && mainImg) {
+    if (typeof mainImg === "string" && mainImg) {
       setDeletedImgs((d) => [...d, mainImg]);
     }
     setMainImg("");
   }, [mainImg]);
 
+  // 追加画像削除
   const removeAdditionalImage = useCallback(
     (index: number) => {
       const imgToRemove = additionalImgs[index];
-      if (
-        typeof imgToRemove === "object" &&
-        !(imgToRemove instanceof File) &&
-        "url" in imgToRemove
-      ) {
-        setDeletedImgs((d) => [...d, imgToRemove.url]);
-      } else if (typeof imgToRemove === "string") {
+      if (typeof imgToRemove === "string") {
         setDeletedImgs((d) => [...d, imgToRemove]);
       }
       setAdditionalImgs((prev) => prev.filter((_, i) => i !== index));
@@ -119,23 +76,20 @@ export function ProductImageUpload({
     [additionalImgs]
   );
 
+  // 変更を親コンポーネントに通知
   useEffect(() => {
-    onChange?.({
+    onImagesChange({
       main: mainImg,
       additional: additionalImgs,
       deleted: deletedImgs,
     });
-  }, [mainImg, additionalImgs, deletedImgs, onChange]);
+  }, [mainImg, additionalImgs, deletedImgs, onImagesChange]);
 
-  useEffect(() => {
-    return () => {
-      [mainImg, ...additionalImgs].forEach((img) => {
-        if (img instanceof File) {
-          URL.revokeObjectURL(URL.createObjectURL(img));
-        }
-      });
-    };
-  }, [mainImg, additionalImgs]);
+  // 画像プレビューURL生成
+  const getImageUrl = (img: File | string) => {
+    if (typeof img === "string") return img;
+    return URL.createObjectURL(img);
+  };
 
   return (
     <div className="space-y-6">
@@ -145,11 +99,11 @@ export function ProductImageUpload({
           メイン画像
         </label>
         <div className="flex items-start gap-4">
-          {mainImgUrl ? (
+          {mainImg ? (
             <div className="relative group">
               <div className="relative w-40 h-40 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
                 <Image
-                  src={mainImgUrl}
+                  src={getImageUrl(mainImg)}
                   alt="メイン商品画像"
                   fill
                   className="object-cover"
@@ -177,7 +131,7 @@ export function ProductImageUpload({
           <div className="flex-1 flex flex-col justify-center gap-2">
             <label className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors cursor-pointer">
               <PhotoIcon className="h-5 w-5 mr-2" />
-              {mainImgUrl ? "メイン画像を変更" : "メイン画像を選択"}
+              {mainImg ? "メイン画像を変更" : "メイン画像を選択"}
               <input
                 type="file"
                 accept="image/*"
@@ -195,38 +149,16 @@ export function ProductImageUpload({
       {/* 追加画像セクション */}
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          追加画像 (最大{maxAdditional}枚)
+          追加画像
         </label>
-        <div
-          className={`border-2 ${
-            isDragging
-              ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-              : "border-dashed border-gray-300 dark:border-gray-600"
-          } rounded-lg p-4 transition-all duration-200`}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setIsDragging(false);
-            if (e.dataTransfer.files?.length) {
-              const newFiles = Array.from(e.dataTransfer.files).slice(
-                0,
-                maxAdditional - additionalImgs.length
-              );
-              setAdditionalImgs((prev) => [...prev, ...newFiles]);
-            }
-          }}
-        >
-          {additionalImgUrls.length > 0 ? (
+        <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4">
+          {additionalImgs.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-4">
-              {additionalImgUrls.map((img, index) => (
+              {additionalImgs.map((img, index) => (
                 <div key={index} className="relative group aspect-square">
                   <div className="relative w-full h-full rounded-md overflow-hidden border border-gray-200 dark:border-gray-700">
                     <Image
-                      src={img}
+                      src={getImageUrl(img)}
                       alt={`追加画像 ${index + 1}`}
                       fill
                       className="object-cover"
@@ -262,12 +194,8 @@ export function ProductImageUpload({
               multiple
               className="sr-only"
               onChange={handleAdditionalImagesChange}
-              disabled={additionalImgs.length >= maxAdditional}
             />
           </label>
-          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            {additionalImgs.length}/{maxAdditional}枚までアップロード可能
-          </p>
         </div>
       </div>
     </div>
