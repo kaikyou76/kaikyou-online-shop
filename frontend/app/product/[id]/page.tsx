@@ -1,21 +1,25 @@
 // frontend/app/product/[id]/page.tsx
-import { cookies } from "next/headers";
+"use client"; // クライアントコンポーネントに変更
+
 import {
   StarIcon,
   ShoppingCartIcon,
   ArrowLeftIcon,
+  PencilIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import ProductImage from "../../../components/ProductImage";
 import { AddToCartButton } from "../../../components/AddToCartButton";
+import { useAuth } from "../../../components/AuthProvider";
+import { useEffect, useState } from "react";
 
-type ProductImage = {
+export type ProductImage = {
   url: string;
   is_main: boolean;
   uploaded_at?: string;
 };
 
-type Product = {
+export type Product = {
   id: number;
   name: string;
   description: string;
@@ -37,7 +41,7 @@ async function getProduct(id: string): Promise<Product | null> {
     const res = await fetch(`${baseUrl}/api/products/${id}`, {
       next: { revalidate: 60 },
       headers: {
-        Accept: "application/json", // 明示的にJSONを要求
+        Accept: "application/json",
       },
     });
 
@@ -46,47 +50,45 @@ async function getProduct(id: string): Promise<Product | null> {
       return null;
     }
 
-    // Content-Typeの確認
     const contentType = res.headers.get("Content-Type");
     if (!contentType?.includes("application/json")) {
       console.error("Invalid content type:", contentType);
       return null;
     }
 
-    // const data = await res.json();
-    // console.log("API Response:", data.data); // デバッグ用
-
-    // return data.data;
-
-    const data = await res.json();
-    console.log("API Response:", data); // デバッグ用
-
-    return data;
-
-    // レスポンスを直接Product型として扱う
-    // const product: Product = await res.json();
-    // console.log("Parsed Product:", product); // デバッグ用
-    // return product;
+    return await res.json();
   } catch (error) {
     console.error("商品取得エラー:", error);
     return null;
   }
 }
 
-export default async function ProductDetail({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const product = await getProduct(params.id);
-  console.log("Raw API response:", product);
-  console.log("Main image URL:", product?.images?.main?.url);
-  const sessionCookie = cookies().get("session");
+export default function ProductDetail({ params }: { params: { id: string } }) {
+  const { currentUser, isLoggedIn, isLoading } = useAuth();
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProduct = async () => {
+      const data = await getProduct(params.id);
+      setProduct(data);
+      setLoading(false);
+    };
+    fetchProduct();
+  }, [params.id]);
 
   const getPlaceholderImage = (id: number) => {
     const imageIndex = (id % 5) + 1;
     return `/placeholder-${imageIndex}.jpg`;
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+        読み込み中...
+      </div>
+    );
+  }
 
   if (!product) {
     return (
@@ -112,7 +114,6 @@ export default async function ProductDetail({
     );
   }
 
-  // 画像データの取得
   const mainImage =
     product.images?.main?.url || getPlaceholderImage(product.id);
   const additionalImages = product.images?.additional || [];
@@ -120,7 +121,6 @@ export default async function ProductDetail({
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
-        {/* 戻るボタン */}
         <div className="mb-6">
           <Link
             href="/"
@@ -131,10 +131,32 @@ export default async function ProductDetail({
           </Link>
         </div>
 
-        {/* 商品メイン情報 */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden">
+        {currentUser?.role === "admin" && (
+          <div className="absolute top-4 right-4 z-10">
+            <Link
+              href={`/product/edit/${params.id}`}
+              className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-sm transition-colors"
+            >
+              <PencilIcon className="h-4 w-4" />
+              <span>編集</span>
+            </Link>
+          </div>
+        )}
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden relative">
+          {currentUser?.role === "admin" && (
+            <div className="absolute top-4 right-4 z-10">
+              <Link
+                href={`/product/edit/${params.id}`}
+                className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-sm transition-colors"
+              >
+                <PencilIcon className="h-4 w-4" />
+                <span>編集</span>
+              </Link>
+            </div>
+          )}
+
           <div className="md:flex">
-            {/* 商品画像セクション */}
             <div className="md:w-1/2 p-6">
               <div className="relative aspect-square overflow-hidden rounded-lg">
                 <ProductImage
@@ -150,7 +172,6 @@ export default async function ProductDetail({
                 )}
               </div>
 
-              {/* 追加画像ギャラリー */}
               {additionalImages.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 mt-4">
                   {additionalImages.map((img, index) => (
@@ -170,7 +191,6 @@ export default async function ProductDetail({
               )}
             </div>
 
-            {/* 商品詳細情報 */}
             <div className="md:w-1/2 p-6 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -208,19 +228,17 @@ export default async function ProductDetail({
                 </p>
               </div>
 
-              {/* カート操作ボタン */}
               <div className="mt-6 space-y-4">
                 <AddToCartButton
                   productId={product.id}
-                  disabled={product.stock <= 0 || !sessionCookie}
-                  isAuthenticated={!!sessionCookie}
+                  disabled={product.stock <= 0 || !isLoggedIn}
+                  isAuthenticated={isLoggedIn}
                 />
               </div>
             </div>
           </div>
         </div>
 
-        {/* 商品詳細スペック */}
         <div className="mt-12 bg-white dark:bg-gray-800 rounded-xl shadow-md p-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
             商品詳細

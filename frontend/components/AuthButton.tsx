@@ -1,4 +1,4 @@
-// components/AuthButton.tsx
+// frontend/components/AuthButton.tsx
 "use client";
 
 import Link from "next/link";

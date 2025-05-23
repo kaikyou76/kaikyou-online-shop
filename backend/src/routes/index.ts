@@ -17,6 +17,7 @@ import { updateUserHandler } from "../endpoints/users/updateUser";
 import { deleteUserHandler } from "../endpoints/users/deleteUser";
 import { getSessionsHandler } from "../endpoints/auth/getSessionsHandler";
 import { validateHandler } from "../endpoints/auth/validate";
+import { productEditByIdHandler } from "../endpoints/productEditById";
 //import { changePasswordHandler } from "../endpoints/auth/changePassword";
 
 const app = new Hono<{
@@ -91,6 +92,7 @@ const protectedRoutes = apiRoutes.use("*", jwtMiddleware);
 protectedRoutes.post("/logout", logoutHandler);
 protectedRoutes.get("/users/me", getUserHandler);
 protectedRoutes.post("/products", productPostHandler);
+protectedRoutes.put("/products/:id", productEditByIdHandler);
 protectedRoutes.get("/cart", getCartHandler);
 protectedRoutes.get("/users", getUsersHandler);
 protectedRoutes.get("/users/:id", getUserByIdHandler);

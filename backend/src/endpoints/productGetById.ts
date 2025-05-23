@@ -1,4 +1,4 @@
-// backend/src/endpoints/productGet.ts
+// backend/src/endpoints/productGetById.ts
 import { Context } from "hono";
 import { Bindings } from "../types/types";
 

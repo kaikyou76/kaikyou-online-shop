@@ -1,10 +1,11 @@
-// components/NavBar.tsx
+// frontend/components/NavBar.tsx
 "use client";
 
 import Link from "next/link";
 import { useAuth } from "./AuthProvider";
 import { AuthButton } from "./AuthButton";
 import { LoginLogoutButton } from "./LoginLogoutButton";
+import { AuthEditButton } from "./AuthEditButton";
 
 export const NavBar = () => {
   const { isLoggedIn, isLoading, currentUser } = useAuth();
@@ -27,6 +28,19 @@ export const NavBar = () => {
               Products
             </Link>
           </li>
+
+          {/* 商品管理ボタン（管理者のみ表示） */}
+          {currentUser?.role === "admin" && (
+            <li>
+              <AuthEditButton
+                productId="new"
+                className="bg-green-50 hover:bg-green-100"
+                productOwnerId={currentUser.id}
+              >
+                New Product
+              </AuthEditButton>
+            </li>
+          )}
 
           <div className="flex-grow"></div>
 
