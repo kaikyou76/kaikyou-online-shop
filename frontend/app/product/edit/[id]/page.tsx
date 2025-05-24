@@ -6,15 +6,14 @@ import Link from "next/link";
 import { redirect, useRouter } from "next/navigation";
 import { ProductImageUpload } from "../../../../components/ProductImageUpload";
 import { useAuth } from "../../../../components/AuthProvider";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useForm } from "react-hook-form";
 // @ts-ignore
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-// 型定義（完全に元の構造と一致）
 type ImageObject = {
-  id: string | number;
+  id: number;
   url: string;
   is_main?: boolean;
 };
@@ -35,7 +34,6 @@ interface Product {
   createdAt: string;
 }
 
-// Zodスキーマ（元のバリデーションロジックを保持）
 const formSchema = z.object({
   name: z.string().min(1, "商品名は必須です"),
   description: z.string().min(1, "商品説明は必須です"),
@@ -46,8 +44,8 @@ const formSchema = z.object({
     .object({
       main: z.union([z.instanceof(File), z.string()]).optional(),
       additional: z.array(z.union([z.instanceof(File), z.string()])).optional(),
-      deleted: z.array(z.string()).optional(),
-      keepImageIds: z.array(z.union([z.string(), z.number()])).optional(),
+      deleted: z.array(z.number()).optional(),
+      keepImageIds: z.array(z.number()).optional(),
     })
     .optional(),
 });
@@ -60,13 +58,17 @@ export default function ProductEditPage({
   params: { id: string };
 }) {
   const router = useRouter();
-  const [submitSuccess, setSubmitSuccess] = useState(false); //
+  const [submitSuccess, setSubmitSuccess] = useState(false);
   const { currentUser, isLoggedIn, isLoading: authLoading } = useAuth();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const baseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8787";
+
+  // 🌟 デバッグ用トレースID生成
+  const generateTraceId = () => Math.random().toString(36).substring(2, 11);
+  const traceId = useRef<string>(generateTraceId()).current;
 
   const {
     register,
@@ -80,14 +82,27 @@ export default function ProductEditPage({
     resolver: zodResolver(formSchema),
   });
 
-  // 商品データ取得（元のロジックを保持）
+  // 商品データ取得（デバッグログ追加）
   const fetchProduct = useCallback(async () => {
+    console.log(`[${traceId}] 🌟 商品取得開始`, new Date().toISOString());
     try {
       const res = await fetch(`${baseUrl}/api/products/${params.id}`, {
         headers: { Accept: "application/json" },
       });
+      console.log(`[${traceId}] 🌟 商品取得レスポンス:`, res.status);
+
       if (!res.ok) throw new Error("商品が見つかりません");
       const data: Product = await res.json();
+
+      // 🌟 取得した画像情報のログ
+      console.log(`[${traceId}] 🌟 取得画像データ:`, {
+        mainId: data.images?.main?.id,
+        additionalIds: data.images?.additional?.map((img) => img.id),
+        keepImageIds: [
+          data.images?.main?.id,
+          ...(data.images?.additional?.map((img) => img.id) || []),
+        ].filter(Boolean),
+      });
 
       setProduct(data);
       reset({
@@ -103,10 +118,11 @@ export default function ProductEditPage({
           keepImageIds: [
             data.images?.main?.id,
             ...(data.images?.additional?.map((img) => img.id) || []),
-          ].filter(Boolean),
+          ].filter((id): id is number => typeof id === "number"), // 数値のみフィルタリング
         },
       });
     } catch (err) {
+      console.error(`[${traceId}] 🌟 商品取得エラー:`, err);
       setError(err instanceof Error ? err.message : "商品の取得に失敗しました");
     } finally {
       setLoading(false);
@@ -114,103 +130,210 @@ export default function ProductEditPage({
   }, [params.id, baseUrl, reset]);
 
   useEffect(() => {
+    console.log(`[${traceId}] 🌟 商品データ取得Effect開始`);
     fetchProduct();
+    return () => {
+      console.log(`[${traceId}] 🌟 商品データ取得Effectクリーンアップ`);
+    };
   }, [fetchProduct]);
 
-  // 画像変更ハンドラ（元のインターフェースを保持）
+  // 画像変更ハンドラ（デバッグログ追加）
   const handleImagesChange = useCallback(
     (data: {
-      main?: File | string;
-      additional?: (File | string)[];
-      deleted?: string[];
+      main?: { id: number; file?: File; url: string }; // ✅ urlを追加
+      additional?: { id: number; file?: File; url: string }[]; // ✅ urlを追加
+      deleted?: number[] | undefined;
     }) => {
+      console.log(`[${traceId}] 🌟 画像変更検出:`, {
+        mainType: data.main?.constructor.name,
+        additionalCount: data.additional?.length,
+        deleted: data.deleted,
+      });
       const currentImages = getValues("images") || {};
-      setValue(
-        "images",
-        {
-          ...currentImages,
-          ...data,
-          keepImageIds: currentImages.keepImageIds || [],
-        },
-        { shouldDirty: true }
-      );
+
+      const newValue = {
+        ...currentImages,
+        main: data.main ? data.main.file || data.main.url : undefined,
+        additional: data.additional?.map((item) => item.file || item.url) || [],
+        deleted: data.deleted || [],
+        keepImageIds: currentImages.keepImageIds || [],
+      };
+
+      // 🌟 更新前後の値比較
+      console.log(`[${traceId}] 🌟 画像状態更新:`, {
+        before: currentImages,
+        after: newValue,
+      });
+
+      setValue("images", newValue, { shouldDirty: true });
     },
     [getValues, setValue]
   );
 
-  // 商品更新処理（元のロジックを完全に保持）
+  // 商品更新処理（詳細ログ追加）
   const updateProduct = useCallback(
     async (data: ProductFormData) => {
-      const token = localStorage.getItem("jwtToken");
-      if (!token) throw new Error("認証トークンがありません");
+      console.log(`[${traceId}] 🌟 更新処理開始`, new Date().toISOString());
+      try {
+        const token = localStorage.getItem("jwtToken");
+        if (!token) throw new Error("認証トークンがありません");
 
-      const formData = new FormData();
-      formData.append("name", data.name);
-      formData.append("description", data.description);
-      formData.append("price", data.price.toString());
-      formData.append("stock", data.stock.toString());
-
-      if (data.category) {
-        formData.append("category_id", data.category);
-      }
-
-      // 画像処理（元のロジックを保持）
-      if (data.images) {
-        // メイン画像
-        if (data.images.main instanceof File) {
-          formData.append("mainImage", data.images.main);
-        } else if (typeof data.images.main === "string" && data.images.main) {
-          const mainImageId = product?.images?.main?.id;
-          if (mainImageId) {
-            formData.append("mainImageId", mainImageId.toString());
-          }
-        }
-
-        // 追加画像
-        data.images.additional?.forEach((item) => {
-          if (item instanceof File) {
-            formData.append("additionalImages", item);
-          }
+        // 🌟 送信データの検証ログ
+        console.log(`[${traceId}] 🌟 検証済みフォームデータ:`, {
+          name: data.name,
+          price: data.price,
+          images: {
+            mainType: data.images?.main?.constructor.name,
+            additionalCount: data.images?.additional?.length,
+            keepImageIds: data.images?.keepImageIds,
+            deletedCount: data.images?.deleted?.length,
+          },
         });
 
-        // 保持する画像ID
-        if (data.images.keepImageIds) {
-          formData.append(
-            "keepImageIds",
-            JSON.stringify(data.images.keepImageIds)
-          );
+        const formData = new FormData();
+        formData.append("name", data.name);
+        formData.append("description", data.description);
+        formData.append("price", data.price.toString());
+        formData.append("stock", data.stock.toString());
+
+        if (data.category) {
+          formData.append("category_id", data.category);
         }
 
-        // 削除された画像
-        if (data.images.deleted?.length) {
-          formData.append("deletedImages", JSON.stringify(data.images.deleted));
+        // 画像処理
+        if (data.images) {
+          // メイン画像
+          if (data.images.main instanceof File) {
+            formData.append("mainImage", data.images.main);
+          } else if (typeof data.images.main === "string" && data.images.main) {
+            const mainImageId = product?.images?.main?.id;
+            if (mainImageId) {
+              formData.append("mainImageId", mainImageId.toString());
+            }
+          }
+
+          // 追加画像
+          data.images.additional?.forEach((item) => {
+            if (item instanceof File) {
+              formData.append("additionalImages", item);
+            } else if (typeof item === "string") {
+              formData.append("additionalImageUrls", item);
+            }
+          });
+
+          // 保持する画像ID (数値のみ許可)
+          if (data.images?.keepImageIds) {
+            data.images.keepImageIds.forEach((id) => {
+              if (typeof id === "number") {
+                formData.append("keepImageIds", id.toString());
+              }
+            });
+          }
+
+          // 削除された画像
+          if (data.images.deleted?.length) {
+            data.images.deleted.forEach((id) => {
+              if (typeof id === "number") {
+                formData.append("deletedImages", id.toString());
+              }
+            });
+          }
         }
+
+        // 🌟 フォームデータ内容のログ（安全なバージョン）
+        const logData: Record<string, any> = {
+          mainImage: "未変更",
+          additionalImages: [],
+          keepImageIds: [],
+          deletedImages: [],
+        };
+
+        const mainImage = formData.get("mainImage");
+        if (mainImage) {
+          logData.mainImage =
+            mainImage instanceof File ? mainImage.name : String(mainImage);
+        }
+
+        logData.additionalImages = formData
+          .getAll("additionalImages")
+          .map((f) => {
+            return f instanceof File ? f.name : String(f);
+          });
+
+        const keepImageIds = formData.get("keepImageIds");
+        if (keepImageIds) {
+          try {
+            logData.keepImageIds = JSON.parse(String(keepImageIds));
+          } catch {
+            logData.keepImageIds = String(keepImageIds);
+          }
+        }
+
+        const deletedImages = formData.get("deletedImages");
+        if (deletedImages) {
+          try {
+            logData.deletedImages = JSON.parse(String(deletedImages));
+          } catch {
+            logData.deletedImages = String(deletedImages);
+          }
+        }
+
+        console.log(`[${traceId}] 🌟 送信FormData内容:`, logData);
+
+        const res = await fetch(`${baseUrl}/api/products/${params.id}`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+
+        // 🌟 レスポンス詳細ログ
+        console.log(`[${traceId}] 🌟 APIレスポンス:`, {
+          status: res.status,
+          ok: res.ok,
+        });
+
+        if (!res.ok) {
+          const error = await res.json();
+          console.error(`[${traceId}] 🌟 APIエラー内容:`, error);
+          throw new Error(error.message || "商品の更新に失敗しました");
+        }
+
+        return await res.json();
+      } finally {
+        console.log(`[${traceId}] 🌟 更新処理終了`, new Date().toISOString());
       }
-
-      const res = await fetch(`${baseUrl}/api/products/${params.id}`, {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "商品の更新に失敗しました");
-      }
-
-      return await res.json();
     },
-    [baseUrl, params.id, product]
+    [baseUrl, params.id, product, traceId]
   );
 
-  // 認証チェック（元のロジックを保持）
+  // フォーム送信ハンドラ（エラートラッキング強化）
+  const onSubmit = handleSubmit(async (data) => {
+    try {
+      console.log(`[${traceId}] 🌟 フォーム送信開始`, new Date().toISOString());
+      await updateProduct(data);
+      router.push(`/product/${params.id}`);
+    } catch (err) {
+      console.error(`[${traceId}] 🌟 フォーム送信エラー:`, err);
+      setError(err instanceof Error ? err.message : "更新に失敗しました");
+    } finally {
+      console.log(`[${traceId}] 🌟 フォーム送信終了`, new Date().toISOString());
+    }
+  });
+
+  // 認証チェック
   useEffect(() => {
+    console.log(`[${traceId}] 🌟 認証チェック開始`);
     if (!authLoading && (!isLoggedIn || currentUser?.role !== "admin")) {
+      console.log(`[${traceId}] 🌟 認証失敗 - リダイレクト`);
       redirect("/");
     }
+    return () => {
+      console.log(`[${traceId}] 🌟 認証チェックEffectクリーンアップ`);
+    };
   }, [authLoading, isLoggedIn, currentUser]);
 
   if (authLoading || loading) {
+    console.log(`[${traceId}] 🌟 ローディング状態表示`);
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -219,6 +342,7 @@ export default function ProductEditPage({
   }
 
   if (!product) {
+    console.log(`[${traceId}] 🌟 商品データなし状態表示`);
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
         <div className="max-w-7xl mx-auto py-12 text-center">
@@ -239,6 +363,7 @@ export default function ProductEditPage({
     );
   }
 
+  console.log(`[${traceId}] 🌟 レンダリング開始`);
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
@@ -262,19 +387,7 @@ export default function ProductEditPage({
             </div>
           )}
 
-          <form
-            onSubmit={handleSubmit(async (data) => {
-              try {
-                await updateProduct(data);
-                router.push(`/product/${params.id}`);
-              } catch (err) {
-                setError(
-                  err instanceof Error ? err.message : "更新に失敗しました"
-                );
-              }
-            })}
-            className="space-y-6"
-          >
+          <form onSubmit={onSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -290,7 +403,6 @@ export default function ProductEditPage({
                   </p>
                 )}
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   カテゴリー
@@ -300,7 +412,6 @@ export default function ProductEditPage({
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   価格*
@@ -323,7 +434,6 @@ export default function ProductEditPage({
                   </p>
                 )}
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   在庫数*
@@ -340,7 +450,7 @@ export default function ProductEditPage({
                     {errors.stock.message}
                   </p>
                 )}
-              </div>
+              </div>{" "}
             </div>
 
             <div>
@@ -364,9 +474,20 @@ export default function ProductEditPage({
                 商品画像
               </label>
               <ProductImageUpload
-                mainImage={watch("images.main") as string | undefined}
+                mainImage={
+                  watch("images.main")
+                    ? { id: 0, url: watch("images.main") as string } // id は適切な値に置き換える
+                    : undefined
+                }
                 additionalImages={
-                  watch("images.additional") as string[] | undefined
+                  watch("images.additional")
+                    ? (watch("images.additional") as string[]).map(
+                        (url, index) => ({
+                          id: index,
+                          url,
+                        })
+                      )
+                    : undefined
                 }
                 onImagesChange={handleImagesChange}
               />

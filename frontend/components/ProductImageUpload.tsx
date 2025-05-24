@@ -1,7 +1,7 @@
 // frontend/components/ProductImageUpload.tsx
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
 import {
   TrashIcon,
@@ -9,25 +9,42 @@ import {
   ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 
+interface ImageItem {
+  id: number; // 常に数値ID（既存: 正の数, 新規: 負の数）
+  file?: File; // 新規画像のみ
+  url: string; // 表示用URL
+}
+
 interface ProductImageUploadProps {
-  mainImage?: string;
-  additionalImages?: string[];
+  mainImage?: { id: number; url: string }; // 数値ID必須に変更
+  additionalImages?: { id: number; url: string }[]; // 数値ID必須に変更
   onImagesChange: (data: {
-    main?: File | string;
-    additional?: (File | string)[];
-    deleted?: string[];
+    main?: { id: number; file?: File; url: string }; // ✅ `url` を追加
+    additional?: { id: number; file?: File; url: string }[]; // ✅ `url` を追加
+    deleted?: number[];
   }) => void;
 }
 
 export function ProductImageUpload({
-  mainImage = "",
+  mainImage,
   additionalImages = [],
   onImagesChange,
 }: ProductImageUploadProps) {
-  const [mainImg, setMainImg] = useState<File | string>(mainImage);
-  const [additionalImgs, setAdditionalImgs] =
-    useState<(File | string)[]>(additionalImages);
-  const [deletedImgs, setDeletedImgs] = useState<string[]>([]);
+  // メイン画像（数値ID管理）
+  const [mainImg, setMainImg] = useState<{
+    id: number;
+    file?: File;
+    url: string;
+  }>(mainImage || { id: -1, url: "" });
+
+  // 追加画像（数値ID管理）
+  const [additionalImgs, setAdditionalImgs] = useState<ImageItem[]>(
+    additionalImages.map((img) => ({ id: img.id, url: img.url }))
+  );
+
+  // 削除予定IDリスト
+  const [deletedImgs, setDeletedImgs] = useState<number[]>([]);
+  const tempIdCounter = useRef(-1); // 新規画像用仮IDカウンター
 
   // メイン画像変更ハンドラー
   const handleMainImageChange = useCallback(
@@ -35,10 +52,15 @@ export function ProductImageUpload({
       if (e.target.files?.[0]) {
         const file = e.target.files[0];
         setMainImg((prev) => {
-          if (typeof prev === "string" && prev) {
-            setDeletedImgs((d) => [...d, prev]);
+          // 既存画像があれば削除リストに追加
+          if (prev.id > 0) {
+            setDeletedImgs((d) => [...d, prev.id]);
           }
-          return file;
+          return {
+            id: tempIdCounter.current--, // 新規は負のID
+            file,
+            url: URL.createObjectURL(file),
+          };
         });
       }
     },
@@ -49,8 +71,12 @@ export function ProductImageUpload({
   const handleAdditionalImagesChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files?.length) {
-        const newFiles = Array.from(e.target.files);
-        setAdditionalImgs((prev) => [...prev, ...newFiles]);
+        const newItems = Array.from(e.target.files).map((file) => ({
+          id: tempIdCounter.current--, // 新規は負のID
+          file,
+          url: URL.createObjectURL(file),
+        }));
+        setAdditionalImgs((prev) => [...prev, ...newItems]);
       }
     },
     []
@@ -58,20 +84,27 @@ export function ProductImageUpload({
 
   // メイン画像リセット
   const resetMainImage = useCallback(() => {
-    if (typeof mainImg === "string" && mainImg) {
-      setDeletedImgs((d) => [...d, mainImg]);
+    if (mainImg.id > 0) {
+      setDeletedImgs((d) => [...d, mainImg.id]);
+    } else if (mainImg.url) {
+      URL.revokeObjectURL(mainImg.url); // 新規画像のメモリ解放
     }
-    setMainImg("");
+    setMainImg({ id: -1, url: "" });
   }, [mainImg]);
 
   // 追加画像削除
   const removeAdditionalImage = useCallback(
-    (index: number) => {
-      const imgToRemove = additionalImgs[index];
-      if (typeof imgToRemove === "string") {
-        setDeletedImgs((d) => [...d, imgToRemove]);
+    (id: number) => {
+      const imgToRemove = additionalImgs.find((img) => img.id === id);
+      if (!imgToRemove) return;
+
+      if (imgToRemove.id > 0) {
+        setDeletedImgs((d) => [...d, imgToRemove.id]); // 既存画像は削除リストに
+      } else if (imgToRemove.url) {
+        URL.revokeObjectURL(imgToRemove.url); // 新規画像はメモリ解放
       }
-      setAdditionalImgs((prev) => prev.filter((_, i) => i !== index));
+
+      setAdditionalImgs((prev) => prev.filter((img) => img.id !== id));
     },
     [additionalImgs]
   );
@@ -79,17 +112,21 @@ export function ProductImageUpload({
   // 変更を親コンポーネントに通知
   useEffect(() => {
     onImagesChange({
-      main: mainImg,
-      additional: additionalImgs,
-      deleted: deletedImgs,
+      main: mainImg
+        ? {
+            id: mainImg.id,
+            url: mainImg.url, // 必須
+            ...(mainImg.id < 0 && { file: mainImg.file }), // 新規のみfile追加
+          }
+        : undefined,
+      additional: additionalImgs.map((img) => ({
+        id: img.id,
+        url: img.url, // 必須
+        ...(img.id < 0 && { file: img.file }),
+      })),
+      deleted: deletedImgs.length ? deletedImgs : undefined,
     });
-  }, [mainImg, additionalImgs, deletedImgs, onImagesChange]);
-
-  // 画像プレビューURL生成
-  const getImageUrl = (img: File | string) => {
-    if (typeof img === "string") return img;
-    return URL.createObjectURL(img);
-  };
+  }, [mainImg, additionalImgs, deletedImgs]);
 
   return (
     <div className="space-y-6">
@@ -99,11 +136,11 @@ export function ProductImageUpload({
           メイン画像
         </label>
         <div className="flex items-start gap-4">
-          {mainImg ? (
+          {mainImg.url ? (
             <div className="relative group">
               <div className="relative w-40 h-40 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
                 <Image
-                  src={getImageUrl(mainImg)}
+                  src={mainImg.url}
                   alt="メイン商品画像"
                   fill
                   className="object-cover"
@@ -131,7 +168,7 @@ export function ProductImageUpload({
           <div className="flex-1 flex flex-col justify-center gap-2">
             <label className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors cursor-pointer">
               <PhotoIcon className="h-5 w-5 mr-2" />
-              {mainImg ? "メイン画像を変更" : "メイン画像を選択"}
+              {mainImg.url ? "メイン画像を変更" : "メイン画像を選択"}
               <input
                 type="file"
                 accept="image/*"
@@ -154,12 +191,12 @@ export function ProductImageUpload({
         <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4">
           {additionalImgs.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-4">
-              {additionalImgs.map((img, index) => (
-                <div key={index} className="relative group aspect-square">
+              {additionalImgs.map((img) => (
+                <div key={img.id} className="relative group aspect-square">
                   <div className="relative w-full h-full rounded-md overflow-hidden border border-gray-200 dark:border-gray-700">
                     <Image
-                      src={getImageUrl(img)}
-                      alt={`追加画像 ${index + 1}`}
+                      src={img.url}
+                      alt={`追加画像 ${img.id}`}
                       fill
                       className="object-cover"
                       sizes="(max-width: 768px) 50vw, 20vw"
@@ -167,7 +204,7 @@ export function ProductImageUpload({
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeAdditionalImage(index)}
+                    onClick={() => removeAdditionalImage(img.id)}
                     className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                     aria-label="画像を削除"
                   >
