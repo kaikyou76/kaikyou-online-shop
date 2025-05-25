@@ -4,7 +4,6 @@ import { Bindings, ErrorResponse, JwtPayload } from "../types/types";
 import { productSchema } from "../schemas/product";
 import { uploadToR2, deleteFromR2 } from "../lib/storage";
 
-// productGetById.tsと完全一致するレスポンス型
 type ProductResponse = {
   id: number;
   name: string;
@@ -25,12 +24,11 @@ export const productEditByIdHandler = async (
   const productId = c.req.param("id");
   const db = c.env.DB;
 
-  // 🌟 トランザクション追跡用ID生成
   const traceId = Math.random().toString(36).substr(2, 9);
   console.log(`[${traceId}] 🌟 商品更新プロセス開始`, new Date().toISOString());
 
   try {
-    // 認証チェック
+    // 認証チェック（完全な実装）
     const payload = c.get("jwtPayload");
     if (!payload || payload.role !== "admin") {
       console.log(`[${traceId}] 🌟 認証失敗:`, {
@@ -52,7 +50,6 @@ export const productEditByIdHandler = async (
 
     const formData = await c.req.formData();
 
-    // 🌟 フォームデータの詳細ログ
     console.log(`[${traceId}] 🌟 受信FormData:`, {
       keepImageIds: formData.getAll("keepImageIds"),
       additionalImagesCount: formData.getAll("additionalImages").length,
@@ -66,7 +63,6 @@ export const productEditByIdHandler = async (
       },
     });
 
-    // フォームデータの前処理
     const rawFormData = {
       name: formData.get("name"),
       description: formData.get("description"),
@@ -75,7 +71,6 @@ export const productEditByIdHandler = async (
       category_id: formData.get("category_id"),
     };
 
-    // バリデーション
     const validationResult = productSchema.safeParse(rawFormData);
     if (!validationResult.success) {
       console.log(
@@ -94,7 +89,6 @@ export const productEditByIdHandler = async (
       );
     }
 
-    // 既存商品の取得
     const existingProduct = await db
       .prepare("SELECT id FROM products WHERE id = ?")
       .bind(productId)
@@ -113,18 +107,17 @@ export const productEditByIdHandler = async (
       );
     }
 
-    // 画像処理 ==============================================
+    // 🌟🌟 重要修正部分開始 🌟🌟
     const mainImageRaw = formData.get("mainImage") as string | File | null;
     let mainImageUrl: string | undefined;
 
-    // 🌟 既存画像情報の取得ログ
+    // 既存画像を取得（image_urlを含めるように修正）
     const existingImages = await db
-      .prepare("SELECT id, is_main FROM images WHERE product_id = ?")
+      .prepare("SELECT id, image_url, is_main FROM images WHERE product_id = ?")
       .bind(productId)
-      .all<{ id: number; is_main: number }>();
+      .all<{ id: number; image_url: string; is_main: number }>();
     console.log(`[${traceId}] 🌟 既存画像情報:`, existingImages.results);
 
-    // メイン画像処理
     if (mainImageRaw instanceof File) {
       console.log(`[${traceId}] 🌟 新しいメイン画像を処理中...`);
 
@@ -133,7 +126,6 @@ export const productEditByIdHandler = async (
         return c.json({ error: "空の画像ファイル" }, 400);
       }
 
-      // 古いメイン画像を取得
       const oldMainImage = await db
         .prepare(
           "SELECT id, image_url FROM images WHERE product_id = ? AND is_main = 1"
@@ -141,7 +133,6 @@ export const productEditByIdHandler = async (
         .bind(productId)
         .first<{ id: number; image_url: string }>();
 
-      // 新しい画像をアップロード
       const uploadResult = await uploadToR2(
         c.env.R2_BUCKET,
         mainImageRaw,
@@ -151,7 +142,6 @@ export const productEditByIdHandler = async (
       mainImageUrl = uploadResult.url;
       console.log(`[${traceId}] 🌟 メイン画像アップロード完了:`, mainImageUrl);
 
-      // 古い画像を削除
       if (oldMainImage?.image_url) {
         console.log(
           `[${traceId}] 🌟 古いメイン画像を削除:`,
@@ -160,7 +150,6 @@ export const productEditByIdHandler = async (
         await deleteFromR2(c.env.R2_BUCKET, oldMainImage.image_url);
       }
 
-      // データベース更新
       await db
         .prepare(
           "UPDATE images SET image_url = ? WHERE product_id = ? AND is_main = 1"
@@ -172,7 +161,6 @@ export const productEditByIdHandler = async (
       mainImageUrl = mainImageRaw;
     }
 
-    // 追加画像処理
     const additionalImages = formData.getAll("additionalImages") as (
       | File
       | string
@@ -203,7 +191,6 @@ export const productEditByIdHandler = async (
         additionalImageUrls
       );
 
-      // 新しい追加画像を挿入
       await db.batch(
         additionalImageUrls.map((url) =>
           db
@@ -215,14 +202,15 @@ export const productEditByIdHandler = async (
       );
     }
 
-    // 不要な画像の削除処理
+    // 🌟🌟 重要修正部分（削除ロジック） 🌟🌟
     const keepImageIds = formData
       .getAll("keepImageIds")
       .map((id) => {
         const num = Number(id);
-        return isNaN(num) ? null : num; // 不正な値をnullに変換
+        return isNaN(num) ? null : num;
       })
-      .filter((id): id is number => id !== null); // nullを除外
+      .filter((id): id is number => id !== null);
+
     console.log(`[${traceId}] 🌟 画像削除処理開始:`, {
       keepImageIds,
       keepCount: keepImageIds.length,
@@ -230,58 +218,212 @@ export const productEditByIdHandler = async (
     });
 
     if (keepImageIds.length > 0) {
-      const placeholders = keepImageIds.map(() => "?").join(",");
-      const deleteQuery = await db
-        .prepare(
-          `SELECT id, image_url FROM images 
-         WHERE product_id = ? 
-         AND is_main = 0 
-         AND id NOT IN (${placeholders})`
-        )
-        .bind(productId, ...keepImageIds);
+      const startTime = performance.now();
 
-      // 🌟 実際に実行されるSQLをログ出力
-      console.log(`[${traceId}] 🌟 削除用SQL:`, deleteQuery.toString());
+      // 🌟 削除処理開始ログ
+      console.log(`[${traceId}] 🌟 画像削除処理開始`, {
+        keepImageCount: keepImageIds.length,
+        startTime: new Date().toISOString(),
+      });
+      const validKeepIds = keepImageIds
+        .filter((id): id is number => typeof id === "number" && id > 0)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .filter((id) => existingImages.results.some((img) => img.id === id)); // 既存IDのみ保持
 
-      const toDelete = await deleteQuery.all<{
-        id: number;
-        image_url: string;
-      }>();
-      console.log(`[${traceId}] 🌟 削除対象画像:`, {
-        count: toDelete.results.length,
-        ids: toDelete.results.map((img) => img.id),
+      console.log(`[${traceId}] 🌟 有効な保持ID検証結果:`, {
+        originalCount: keepImageIds.length,
+        validCount: validKeepIds.length,
+        invalidIds: keepImageIds.filter((id) => !validKeepIds.includes(id)),
       });
 
-      if (toDelete.results.length > 0) {
-        // 🌟 削除前確認ログ
-        console.log(`[${traceId}] 🌟 画像削除開始:`, {
-          r2Files: toDelete.results.map((img) => img.image_url),
-          dbIds: toDelete.results.map((img) => img.id),
+      if (validKeepIds.length === 0 && additionalImages.length > 0) {
+        console.error(`[${traceId}] 🚨 危険：全追加画像削除試行のブロック`);
+        return c.json(
+          {
+            error: {
+              code: "DANGEROUS_OPERATION",
+              message: "全追加画像の削除は許可されていません",
+            },
+          },
+          400
+        );
+      }
+
+      let logEntry: { id: number } | null = null;
+
+      try {
+        console.log(`[${traceId}] 🌟 削除ログ登録開始`, {
+          userId: payload.user_id,
+          productId: productId,
         });
 
-        // R2から削除
-        await Promise.all(
-          toDelete.results.map((img) =>
-            deleteFromR2(c.env.R2_BUCKET, img.image_url)
+        logEntry = await db
+          .prepare(
+            `INSERT INTO admin_logs 
+             (admin_id, action, target_type, target_id, description)
+             VALUES (?, ?, ?, ?, ?)
+             RETURNING id`
           )
+          .bind(
+            payload.user_id,
+            "delete_images",
+            "product",
+            productId,
+            JSON.stringify({
+              status: "processing",
+              keepImageIds: validKeepIds,
+              startTime: new Date().toISOString(),
+              traceId,
+            })
+          )
+          .first<{ id: number }>();
+
+        console.log(`[${traceId}] 🌟 削除ログ登録完了`, {
+          logId: logEntry?.id,
+          validKeepIdsCount: validKeepIds.length,
+        });
+
+        // 🌟🌟 重要修正（削除対象クエリ）
+        const deleteQuery =
+          validKeepIds.length > 0
+            ? db
+                .prepare(
+                  `SELECT id, image_url FROM images 
+               WHERE product_id = ? 
+               AND is_main = 0 
+               AND id NOT IN (${validKeepIds.map(() => "?").join(",")})
+               AND image_url NOT IN (${additionalImageUrls
+                 .map(() => "?")
+                 .join(",")})`
+                )
+                .bind(productId, ...validKeepIds, ...additionalImageUrls)
+            : db
+                .prepare(
+                  `SELECT id, image_url FROM images 
+               WHERE product_id = ? 
+               AND is_main = 0
+               AND image_url NOT IN (${additionalImageUrls
+                 .map(() => "?")
+                 .join(",")})`
+                )
+                .bind(productId, ...additionalImageUrls);
+
+        console.log(
+          `[${traceId}] 🌟 削除対象検索クエリ:`,
+          deleteQuery.toString()
         );
 
-        // DBから削除
+        const toDelete = await deleteQuery.all<{
+          id: number;
+          image_url: string;
+        }>();
+        const deleteTargets = toDelete.results;
+
+        console.log(`[${traceId}] 🌟 削除対象特定結果:`, {
+          targetCount: deleteTargets.length,
+          sampleIds: deleteTargets.slice(0, 3).map((t) => t.id),
+        });
+
+        if (deleteTargets.length > 0) {
+          const MAX_RETRIES = 3;
+          const chunkSize = 100;
+
+          // データベース削除（リトライ付き）
+          for (let i = 0; i < deleteTargets.length; i += chunkSize) {
+            const chunk = deleteTargets.slice(i, i + chunkSize);
+            let retryCount = 0;
+
+            while (retryCount < MAX_RETRIES) {
+              try {
+                await db.batch(
+                  chunk.map((img) =>
+                    db.prepare("DELETE FROM images WHERE id = ?").bind(img.id)
+                  )
+                );
+                break;
+              } catch (error) {
+                retryCount++;
+                if (retryCount === MAX_RETRIES) throw error;
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+              }
+            }
+          }
+
+          // ストレージ削除（リトライ付き）
+          await Promise.all(
+            deleteTargets.map(async (img, index) => {
+              let retries = 3;
+              while (retries > 0) {
+                try {
+                  await deleteFromR2(c.env.R2_BUCKET, img.image_url);
+                  console.log(
+                    `[${traceId}] ✅ ファイル削除成功: ${img.image_url}`
+                  );
+                  break;
+                } catch (error) {
+                  retries--;
+                  if (retries === 0) {
+                    console.error(
+                      `[${traceId}] ❌ ファイル削除失敗: ${img.image_url}`,
+                      error
+                    );
+                    throw error;
+                  }
+                  await new Promise((resolve) => setTimeout(resolve, 1000));
+                }
+              }
+            })
+          );
+        }
+
+        // ログ更新
         await db
           .prepare(
-            `DELETE FROM images WHERE id IN (${toDelete.results
-              .map((img) => img.id)
-              .join(",")})`
+            `UPDATE admin_logs SET
+             description = ?,
+             created_at = ?
+             WHERE id = ?`
+          )
+          .bind(
+            JSON.stringify({
+              status: "success",
+              deletedCount: deleteTargets.length,
+              elapsedMs: performance.now() - startTime,
+            }),
+            new Date().toISOString(),
+            logEntry.id
           )
           .run();
+      } catch (error) {
+        console.error(`[${traceId}] ❌ 削除処理例外発生`, {
+          error: error.message,
+          stack: error.stack?.split("\n")[0],
+        });
 
-        console.log(`[${traceId}] 🌟 画像削除完了`);
+        if (logEntry) {
+          await db
+            .prepare(
+              `UPDATE admin_logs SET
+               description = ?,
+               created_at = ?
+               WHERE id = ?`
+            )
+            .bind(
+              JSON.stringify({
+                status: "error",
+                error: error.message,
+                timestamp: new Date().toISOString(),
+              }),
+              new Date().toISOString(),
+              logEntry.id
+            )
+            .run();
+        }
+        throw error;
       }
-    } else {
-      console.log(`[${traceId}] 🌟 削除対象画像なし（keepImageIds空）`);
     }
 
-    // 商品基本情報更新 =======================================
+    // 商品基本情報更新
     console.log(`[${traceId}] 🌟 商品基本情報更新開始`);
     await db
       .prepare(
@@ -331,10 +473,8 @@ export const productEditByIdHandler = async (
         is_main: number;
       }>();
 
-    // 🌟 更新後の画像状態ログ
     console.log(`[${traceId}] 🌟 更新後画像状態:`, images.results);
 
-    // レスポンス構築
     const mainImage = images.results.find((img) => img.is_main === 1);
     if (!mainImage) {
       console.error(`[${traceId}] 🌟 メイン画像が存在しません`);
@@ -359,7 +499,6 @@ export const productEditByIdHandler = async (
       },
     };
 
-    // 処理結果のログ出力
     console.log(`[${traceId}] 🌟 商品更新成功:`, {
       productId,
       mainImageUpdated: mainImageRaw instanceof File,

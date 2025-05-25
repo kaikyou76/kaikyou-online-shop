@@ -22,6 +22,7 @@ interface ProductImageUploadProps {
     main?: { id: number; file?: File; url: string }; // ✅ `url` を追加
     additional?: { id: number; file?: File; url: string }[]; // ✅ `url` を追加
     deleted?: number[];
+    keepImageIds?: number[]; // 追加
   }) => void;
 }
 
@@ -109,22 +110,28 @@ export function ProductImageUpload({
     [additionalImgs]
   );
 
-  // 変更を親コンポーネントに通知
+  // useEffect内の変更通知処理
   useEffect(() => {
+    const allIds = [
+      ...(mainImg.id !== -1 ? [mainImg.id] : []),
+      ...additionalImgs.map((img) => img.id),
+    ];
+
     onImagesChange({
-      main: mainImg
+      main: mainImg.url
         ? {
             id: mainImg.id,
-            url: mainImg.url, // 必須
-            ...(mainImg.id < 0 && { file: mainImg.file }), // 新規のみfile追加
+            url: mainImg.url,
+            ...(mainImg.id < 0 && { file: mainImg.file }),
           }
         : undefined,
       additional: additionalImgs.map((img) => ({
         id: img.id,
-        url: img.url, // 必須
+        url: img.url,
         ...(img.id < 0 && { file: img.file }),
       })),
       deleted: deletedImgs.length ? deletedImgs : undefined,
+      keepImageIds: allIds, // 全IDを保持リストに追加
     });
   }, [mainImg, additionalImgs, deletedImgs]);
 

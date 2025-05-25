@@ -46,6 +46,7 @@ const formSchema = z.object({
       additional: z.array(z.union([z.instanceof(File), z.string()])).optional(),
       deleted: z.array(z.number()).optional(),
       keepImageIds: z.array(z.number()).optional(),
+      existingIds: z.array(z.number()).optional(),
     })
     .optional(),
 });
@@ -118,7 +119,12 @@ export default function ProductEditPage({
           keepImageIds: [
             data.images?.main?.id,
             ...(data.images?.additional?.map((img) => img.id) || []),
-          ].filter((id): id is number => typeof id === "number"), // 数値のみフィルタリング
+          ].filter((id): id is number => typeof id === "number"),
+          // 実際のIDを保持するための追加フィールド
+          existingIds: [
+            data.images?.main?.id,
+            ...(data.images?.additional?.map((img) => img.id) || []),
+          ].filter((id): id is number => typeof id === "number"),
         },
       });
     } catch (err) {
@@ -140,15 +146,18 @@ export default function ProductEditPage({
   // 画像変更ハンドラ（デバッグログ追加）
   const handleImagesChange = useCallback(
     (data: {
-      main?: { id: number; file?: File; url: string }; // ✅ urlを追加
-      additional?: { id: number; file?: File; url: string }[]; // ✅ urlを追加
-      deleted?: number[] | undefined;
+      main?: { id: number; file?: File; url: string };
+      additional?: { id: number; file?: File; url: string }[];
+      deleted?: number[];
+      keepImageIds?: number[];
     }) => {
       console.log(`[${traceId}] 🌟 画像変更検出:`, {
-        mainType: data.main?.constructor.name,
+        mainType: data.main?.file ? "File" : data.main?.url ? "URL" : "None",
         additionalCount: data.additional?.length,
         deleted: data.deleted,
+        keepImageIds: data.keepImageIds,
       });
+
       const currentImages = getValues("images") || {};
 
       const newValue = {
@@ -156,10 +165,9 @@ export default function ProductEditPage({
         main: data.main ? data.main.file || data.main.url : undefined,
         additional: data.additional?.map((item) => item.file || item.url) || [],
         deleted: data.deleted || [],
-        keepImageIds: currentImages.keepImageIds || [],
+        keepImageIds: data.keepImageIds || [], // ← 修正
       };
 
-      // 🌟 更新前後の値比較
       console.log(`[${traceId}] 🌟 画像状態更新:`, {
         before: currentImages,
         after: newValue,
@@ -178,7 +186,7 @@ export default function ProductEditPage({
         const token = localStorage.getItem("jwtToken");
         if (!token) throw new Error("認証トークンがありません");
 
-        // 🌟 送信データの検証ログ
+        // 送信データの検証ログ
         console.log(`[${traceId}] 🌟 検証済みフォームデータ:`, {
           name: data.name,
           price: data.price,
@@ -200,85 +208,86 @@ export default function ProductEditPage({
           formData.append("category_id", data.category);
         }
 
-        // 画像処理
+        // 画像処理ロジック
         if (data.images) {
-          // メイン画像
+          // 既存画像IDの自動収集
+          const existingMainId = product?.images?.main?.id;
+          const existingAdditionalIds =
+            product?.images?.additional?.map((img) => img.id) || [];
+          const allExistingIds = [
+            ...(existingMainId ? [existingMainId] : []),
+            ...existingAdditionalIds,
+          ].filter((id): id is number => !!id);
+
+          // ユーザーが選択した保持IDとマージ
+          const userKeepIds =
+            data.images.keepImageIds?.filter((id): id is number => !!id) || [];
+          const mergedKeepIds = Array.from(
+            new Set([...allExistingIds, ...userKeepIds])
+          );
+
+          // 保持IDを送信
+          mergedKeepIds.forEach((id) => {
+            formData.append("keepImageIds", id.toString());
+          });
+
+          // 削除対象を明示的に指定
+          const deletedIds = allExistingIds.filter(
+            (id) => !mergedKeepIds.includes(id)
+          );
+          deletedIds.forEach((id) => {
+            formData.append("deleted", id.toString());
+          });
+
+          // メイン画像処理
           if (data.images.main instanceof File) {
             formData.append("mainImage", data.images.main);
-          } else if (typeof data.images.main === "string" && data.images.main) {
-            const mainImageId = product?.images?.main?.id;
-            if (mainImageId) {
-              formData.append("mainImageId", mainImageId.toString());
-            }
+          } else if (typeof data.images.main === "string") {
+            formData.append("mainImage", data.images.main);
           }
 
-          // 追加画像
+          // 追加画像処理（型安全な修正版）
           data.images.additional?.forEach((item) => {
             if (item instanceof File) {
               formData.append("additionalImages", item);
             } else if (typeof item === "string") {
               formData.append("additionalImageUrls", item);
+            } else if (
+              typeof item === "object" &&
+              item !== null &&
+              "url" in item
+            ) {
+              // 型チェックを強化
+              const urlValue = (item as { url: unknown }).url;
+              if (typeof urlValue === "string") {
+                formData.append("additionalImageUrls", urlValue);
+              } else {
+                console.error(`無効なURL形式: ${urlValue}`);
+              }
+            } else {
+              console.error("予期せぬデータ形式:", item);
             }
           });
-
-          // 保持する画像ID (数値のみ許可)
-          if (data.images?.keepImageIds) {
-            data.images.keepImageIds.forEach((id) => {
-              if (typeof id === "number") {
-                formData.append("keepImageIds", id.toString());
-              }
-            });
-          }
-
-          // 削除された画像
-          if (data.images.deleted?.length) {
-            data.images.deleted.forEach((id) => {
-              if (typeof id === "number") {
-                formData.append("deletedImages", id.toString());
-              }
-            });
-          }
         }
 
-        // 🌟 フォームデータ内容のログ（安全なバージョン）
-        const logData: Record<string, any> = {
-          mainImage: "未変更",
-          additionalImages: [],
-          keepImageIds: [],
-          deletedImages: [],
+        // ログ用データ生成
+        const logData = {
+          keepImageIds: formData.getAll("keepImageIds"),
+          deletedImages: formData.getAll("deleted"),
+          mainImage:
+            data.images?.main instanceof File
+              ? data.images.main.name
+              : data.images?.main,
+          additionalImages: data.images?.additional?.map((img) => {
+            if (img instanceof File) return img.name;
+            if (typeof img === "string") return img;
+            if (typeof img === "object" && img !== null && "url" in img) {
+              return (img as { url: string }).url;
+            }
+            return "不明な形式";
+          }),
         };
-
-        const mainImage = formData.get("mainImage");
-        if (mainImage) {
-          logData.mainImage =
-            mainImage instanceof File ? mainImage.name : String(mainImage);
-        }
-
-        logData.additionalImages = formData
-          .getAll("additionalImages")
-          .map((f) => {
-            return f instanceof File ? f.name : String(f);
-          });
-
-        const keepImageIds = formData.get("keepImageIds");
-        if (keepImageIds) {
-          try {
-            logData.keepImageIds = JSON.parse(String(keepImageIds));
-          } catch {
-            logData.keepImageIds = String(keepImageIds);
-          }
-        }
-
-        const deletedImages = formData.get("deletedImages");
-        if (deletedImages) {
-          try {
-            logData.deletedImages = JSON.parse(String(deletedImages));
-          } catch {
-            logData.deletedImages = String(deletedImages);
-          }
-        }
-
-        console.log(`[${traceId}] 🌟 送信FormData内容:`, logData);
+        console.log(`[${traceId}] 🌟 送信データ詳細:`, logData);
 
         const res = await fetch(`${baseUrl}/api/products/${params.id}`, {
           method: "PUT",
@@ -286,7 +295,6 @@ export default function ProductEditPage({
           body: formData,
         });
 
-        // 🌟 レスポンス詳細ログ
         console.log(`[${traceId}] 🌟 APIレスポンス:`, {
           status: res.status,
           ok: res.ok,
@@ -294,8 +302,8 @@ export default function ProductEditPage({
 
         if (!res.ok) {
           const error = await res.json();
-          console.error(`[${traceId}] 🌟 APIエラー内容:`, error);
-          throw new Error(error.message || "商品の更新に失敗しました");
+          console.error(`[${traceId}] 🌟 エラー詳細:`, error);
+          throw new Error(error.message || "更新に失敗しました");
         }
 
         return await res.json();
@@ -303,7 +311,7 @@ export default function ProductEditPage({
         console.log(`[${traceId}] 🌟 更新処理終了`, new Date().toISOString());
       }
     },
-    [baseUrl, params.id, product, traceId]
+    [baseUrl, params.id, product]
   );
 
   // フォーム送信ハンドラ（エラートラッキング強化）
@@ -476,17 +484,18 @@ export default function ProductEditPage({
               <ProductImageUpload
                 mainImage={
                   watch("images.main")
-                    ? { id: 0, url: watch("images.main") as string } // id は適切な値に置き換える
+                    ? {
+                        id: product?.images?.main?.id || -1, // 実際のDB IDを使用
+                        url: watch("images.main") as string,
+                      }
                     : undefined
                 }
                 additionalImages={
                   watch("images.additional")
-                    ? (watch("images.additional") as string[]).map(
-                        (url, index) => ({
-                          id: index,
-                          url,
-                        })
-                      )
+                    ? (product?.images?.additional || []).map((img) => ({
+                        id: img.id, // 実際のDB IDを使用
+                        url: img.url,
+                      }))
                     : undefined
                 }
                 onImagesChange={handleImagesChange}
