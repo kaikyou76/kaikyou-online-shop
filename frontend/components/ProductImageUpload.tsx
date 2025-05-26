@@ -21,8 +21,8 @@ interface ProductImageUploadProps {
   onImagesChange: (data: {
     main?: { id: number; file?: File; url: string }; // ✅ `url` を追加
     additional?: { id: number; file?: File; url: string }[]; // ✅ `url` を追加
-    deleted?: number[];
-    keepImageIds?: number[]; // 追加
+    deletedImageIds: number[];
+    keepImageIds: number[]; // 追加
   }) => void;
 }
 
@@ -44,21 +44,44 @@ export function ProductImageUpload({
   );
 
   // 削除予定IDリスト
-  const [deletedImgs, setDeletedImgs] = useState<number[]>([]);
+  const [deletedImageIds, setDeletedImageIds] = useState<number[]>([]);
   const tempIdCounter = useRef(-1); // 新規画像用仮IDカウンター
+
+  useEffect(() => {
+    return () => {
+      // メイン画像のオブジェクトURL解放
+      if (mainImg.id < 0 && mainImg.url) {
+        URL.revokeObjectURL(mainImg.url);
+      }
+
+      // 追加画像のオブジェクトURL解放
+      additionalImgs.forEach((img) => {
+        if (img.id < 0 && img.url) {
+          URL.revokeObjectURL(img.url);
+        }
+      });
+    };
+  }, []); // 空の依存配列
 
   // メイン画像変更ハンドラー
   const handleMainImageChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files?.[0]) {
         const file = e.target.files[0];
+
         setMainImg((prev) => {
-          // 既存画像があれば削除リストに追加
-          if (prev.id > 0) {
-            setDeletedImgs((d) => [...d, prev.id]);
+          // 前の画像が新規の場合（負のID）URL解放
+          if (prev.id < 0 && prev.url) {
+            URL.revokeObjectURL(prev.url);
           }
+
+          // 既存画像があれば削除リスト追加
+          if (prev.id > 0) {
+            setDeletedImageIds((d) => [...d, prev.id]);
+          }
+
           return {
-            id: tempIdCounter.current--, // 新規は負のID
+            id: tempIdCounter.current--,
             file,
             url: URL.createObjectURL(file),
           };
@@ -86,7 +109,7 @@ export function ProductImageUpload({
   // メイン画像リセット
   const resetMainImage = useCallback(() => {
     if (mainImg.id > 0) {
-      setDeletedImgs((d) => [...d, mainImg.id]);
+      setDeletedImageIds((d) => [...d, mainImg.id]);
     } else if (mainImg.url) {
       URL.revokeObjectURL(mainImg.url); // 新規画像のメモリ解放
     }
@@ -94,27 +117,37 @@ export function ProductImageUpload({
   }, [mainImg]);
 
   // 追加画像削除
-  const removeAdditionalImage = useCallback(
-    (id: number) => {
-      const imgToRemove = additionalImgs.find((img) => img.id === id);
-      if (!imgToRemove) return;
+  const removeAdditionalImage = useCallback((id: number) => {
+    setAdditionalImgs((prev) => {
+      const removedImg = prev.find((img) => img.id === id);
 
-      if (imgToRemove.id > 0) {
-        setDeletedImgs((d) => [...d, imgToRemove.id]); // 既存画像は削除リストに
-      } else if (imgToRemove.url) {
-        URL.revokeObjectURL(imgToRemove.url); // 新規画像はメモリ解放
+      // 削除対象が既存画像（正のID）の場合のみdeletedImageIdsに追加
+      if (removedImg?.id && removedImg.id > 0) {
+        setDeletedImageIds((prevIds) => [...prevIds, removedImg.id]);
       }
 
-      setAdditionalImgs((prev) => prev.filter((img) => img.id !== id));
-    },
-    [additionalImgs]
-  );
+      // 新規画像（負のID）の場合、オブジェクトURLを解放
+      if (removedImg?.id && removedImg.id < 0 && removedImg.url) {
+        URL.revokeObjectURL(removedImg.url);
+      }
+
+      return prev.filter((img) => img.id !== id);
+    });
+  }, []); // 依存配列は空でOK
 
   // useEffect内の変更通知処理
   useEffect(() => {
-    const allIds = [
-      ...(mainImg.id !== -1 ? [mainImg.id] : []),
-      ...additionalImgs.map((img) => img.id),
+    const currentMainId = mainImg.id;
+    const currentAdditionalIds = additionalImgs.map((img) => img.id);
+
+    // 保持するべきIDをフィルタリング（構文エラー修正）
+    const validKeepIds = [
+      ...(currentMainId > 0 && !deletedImageIds.includes(currentMainId)
+        ? [currentMainId]
+        : []),
+      ...currentAdditionalIds.filter(
+        (id) => id > 0 && !deletedImageIds.includes(id)
+      ), // ← 閉じ括弧を追加
     ];
 
     onImagesChange({
@@ -130,10 +163,10 @@ export function ProductImageUpload({
         url: img.url,
         ...(img.id < 0 && { file: img.file }),
       })),
-      deleted: deletedImgs.length ? deletedImgs : undefined,
-      keepImageIds: allIds, // 全IDを保持リストに追加
+      deletedImageIds: deletedImageIds,
+      keepImageIds: validKeepIds,
     });
-  }, [mainImg, additionalImgs, deletedImgs]);
+  }, [mainImg, additionalImgs, deletedImageIds, onImagesChange]);
 
   return (
     <div className="space-y-6">
