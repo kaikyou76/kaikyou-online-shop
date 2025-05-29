@@ -1,5 +1,5 @@
-// frontend/app/product/[id]/page.tsx
-"use client"; // クライアントコンポーネントに変更
+// frontend/app/products/[id]/page.tsx
+"use client";
 
 import {
   StarIcon,
@@ -25,15 +25,15 @@ export type Product = {
   description: string;
   price: number;
   stock: number;
+  category_id: number | null;
+  category_name: string | null;
+  createdAt: string;
   images?: {
     main: ProductImage;
     additional: ProductImage[];
   };
   rating?: number;
-  category?: string;
-  createdAt: string;
 };
-
 async function getProduct(id: string): Promise<Product | null> {
   try {
     const baseUrl =
@@ -56,7 +56,24 @@ async function getProduct(id: string): Promise<Product | null> {
       return null;
     }
 
-    return await res.json();
+    const { data } = await res.json();
+
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      price: data.price,
+      stock: data.stock,
+      category_id: data.category_id,
+      category_name: data.category_name,
+      createdAt: data.createdAt,
+      images: {
+        main: data.images?.main,
+        additional: data.images?.additional || [],
+      },
+    };
   } catch (error) {
     console.error("商品取得エラー:", error);
     return null;
@@ -134,7 +151,7 @@ export default function ProductDetail({ params }: { params: { id: string } }) {
         {currentUser?.role === "admin" && (
           <div className="absolute top-4 right-4 z-10">
             <Link
-              href={`/product/edit/${params.id}`}
+              href={`/products/edit/${params.id}`}
               className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-sm transition-colors"
             >
               <PencilIcon className="h-4 w-4" />
@@ -147,7 +164,7 @@ export default function ProductDetail({ params }: { params: { id: string } }) {
           {currentUser?.role === "admin" && (
             <div className="absolute top-4 right-4 z-10">
               <Link
-                href={`/product/edit/${params.id}`}
+                href={`/products/edit/${params.id}`}
                 className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-sm transition-colors"
               >
                 <PencilIcon className="h-4 w-4" />
@@ -194,9 +211,9 @@ export default function ProductDetail({ params }: { params: { id: string } }) {
             <div className="md:w-1/2 p-6 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  {product.category && (
+                  {product.category_name && (
                     <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-blue-900 dark:text-blue-300">
-                      {product.category}
+                      {product.category_name}
                     </span>
                   )}
                   {product.rating && (
@@ -249,7 +266,7 @@ export default function ProductDetail({ params }: { params: { id: string } }) {
                 仕様
               </h3>
               <ul className="space-y-2 text-gray-600 dark:text-gray-300">
-                <li>• カテゴリー: {product.category || "未設定"}</li>
+                <li>• カテゴリー: {product.category_id || "未設定"}</li>
                 <li>• 商品ID: {product.id}</li>
                 <li>• 価格: ¥{product.price.toLocaleString()}</li>
                 <li>

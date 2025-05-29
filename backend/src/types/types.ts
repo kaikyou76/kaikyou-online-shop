@@ -134,6 +134,7 @@ export interface LoginResponseData {
 }
 
 interface ImageResponse {
+  id: number;
   url: string;
   is_main: boolean;
   uploaded_at: string;

@@ -115,7 +115,7 @@ export default function Home() {
           {products.map((product) => (
             <Link
               key={product.id}
-              href={`/product/${product.id}`}
+              href={`/products/${product.id}`}
               className="block p-6 border border-gray-200 rounded-lg shadow hover:shadow-md transition"
             >
               <h2 className="text-xl font-semibold mb-2 truncate">

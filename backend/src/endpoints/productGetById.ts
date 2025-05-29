@@ -2,14 +2,20 @@
 import { Context } from "hono";
 import { Bindings } from "../types/types";
 
-// 厳格な型定義（productCreate.tsと完全一致）
-type Image = {
+// ======================
+// 型定義 (DB層とAPI層を分離)
+// ======================
+
+/** DBから取得する生の画像型 */
+type DBImage = {
   id: number;
   url: string;
-  is_main: number; // DBでは1（true）または0（false）
+  is_main: number; // 0 or 1
+  created_at: string;
 };
 
-type ProductResponse = {
+/** DBから取得する生の商品型 */
+type DBProduct = {
   id: number;
   name: string;
   description: string;
@@ -18,11 +24,50 @@ type ProductResponse = {
   category_id: number | null;
   category_name: string | null;
   created_at: string;
-  images: {
-    main: { id: number; url: string; is_main: true }; // nullを許容しない
-    additional: { id: number; url: string; is_main: false }[];
+};
+
+/** APIレスポンス用の画像型 */
+type APIImage = {
+  id: number;
+  url: string;
+  is_main: boolean;
+  uploaded_at: string;
+};
+
+/** APIレスポンス用の商品型 */
+type APIProductResponse = {
+  success: true;
+  data: {
+    id: number;
+    name: string;
+    description: string;
+    price: number;
+    stock: number;
+    category_id: number | null;
+    category_name: string | null;
+    createdAt: string;
+    images: {
+      main: APIImage & { is_main: true };
+      additional: (APIImage & { is_main: false })[];
+    };
   };
 };
+
+// ======================
+// 変換関数
+// ======================
+
+/** DB画像 → API画像に変換 */
+const convertImage = (dbImage: DBImage): APIImage => ({
+  id: dbImage.id,
+  url: dbImage.url,
+  is_main: dbImage.is_main === 1,
+  uploaded_at: new Date(dbImage.created_at).toISOString(),
+});
+
+// ======================
+// ハンドラー実装
+// ======================
 
 export const productGetByIdHandler = async (
   c: Context<{ Bindings: Bindings }>
@@ -30,20 +75,20 @@ export const productGetByIdHandler = async (
   const id = c.req.param("id");
 
   try {
-    // 商品基本情報取得（productCreate.tsのINSERT文と対称的なSELECT）
+    // 商品基本情報取得
     const product = await c.env.DB.prepare(
       `
       SELECT 
         p.id, p.name, p.description, p.price, p.stock,
         p.category_id, c.name as category_name,
-        p.created_at, p.created_at
+        p.created_at
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       WHERE p.id = ?
-    `
+      `
     )
-      .bind(id)
-      .first<ProductResponse>();
+      .bind(Number(id))
+      .first<DBProduct>();
 
     if (!product) {
       return c.json(
@@ -57,19 +102,23 @@ export const productGetByIdHandler = async (
       );
     }
 
-    // 画像情報取得（productCreate.tsのimagesテーブル構造に完全準拠）
+    // 画像情報取得
     const images = await c.env.DB.prepare(
       `
-      SELECT id, image_url as url, is_main
+      SELECT 
+        id, 
+        image_url as url, 
+        is_main,
+        created_at
       FROM images
       WHERE product_id = ?
       ORDER BY is_main DESC, created_at ASC
-    `
+      `
     )
       .bind(id)
-      .all<Image>();
+      .all<DBImage>();
 
-    // メイン画像の厳格なチェック（productCreate.tsの必須条件を反映）
+    // メイン画像チェック
     const mainImage = images.results.find((img) => img.is_main === 1);
     if (!mainImage) {
       return c.json(
@@ -83,29 +132,28 @@ export const productGetByIdHandler = async (
             },
           },
         },
-        500 // データ不整合はサーバーエラーとして扱う
+        500
       );
     }
 
-    // 追加画像（productCreate.tsのadditionalImages処理と対称）
-    const additionalImages = images.results
-      .filter((img) => img.is_main === 0)
-      .map((img) => ({
-        id: img.id,
-        url: img.url,
-        is_main: false as const,
-      }));
-
-    // レスポンス構築（productCreate.tsのPOSTレスポンスと完全一致）
-    const response: ProductResponse = {
-      ...product,
-      images: {
-        main: {
-          id: mainImage.id,
-          url: mainImage.url,
-          is_main: true,
+    // レスポンス構築
+    const response: APIProductResponse = {
+      success: true,
+      data: {
+        ...product,
+        createdAt: new Date(product.created_at).toISOString(),
+        images: {
+          main: {
+            ...convertImage(mainImage),
+            is_main: true,
+          },
+          additional: images.results
+            .filter((img) => img.is_main === 0)
+            .map((img) => ({
+              ...convertImage(img),
+              is_main: false,
+            })),
         },
-        additional: additionalImages,
       },
     };
 

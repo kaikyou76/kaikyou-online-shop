@@ -92,7 +92,7 @@ const protectedRoutes = apiRoutes.use("*", jwtMiddleware);
 protectedRoutes.post("/logout", logoutHandler);
 protectedRoutes.get("/users/me", getUserHandler);
 protectedRoutes.post("/products", productPostHandler);
-protectedRoutes.put("/products/:id", productEditByIdHandler);
+protectedRoutes.put("/products/edit/:id", productEditByIdHandler);
 protectedRoutes.get("/cart", getCartHandler);
 protectedRoutes.get("/users", getUsersHandler);
 protectedRoutes.get("/users/:id", getUserByIdHandler);

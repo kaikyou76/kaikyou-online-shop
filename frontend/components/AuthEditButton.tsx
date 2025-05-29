@@ -65,7 +65,7 @@ export const AuthEditButton = ({
 
   return (
     <Link
-      href={`/product/${productId}/edit`}
+      href={`/products/${productId}/edit`}
       className={finalClasses}
       aria-label="Edit product"
       prefetch={false}
