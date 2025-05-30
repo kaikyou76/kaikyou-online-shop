@@ -14,7 +14,7 @@ type ProductImage = {
 type ProductImageUploadProps = {
   mainImage: ProductImage | undefined;
   additionalImages: ProductImage[];
-  onMainImageChange: (file: File | null, id: number) => void;
+  onMainImageChange: (file: File) => void;
   onAdditionalImageChange: (
     files: Array<{ url: File; is_main: boolean }>,
     ids: number[]
@@ -111,7 +111,7 @@ const ProductImageUpload = memo(function ProductImageUpload({
       }
 
       setLocalMainImage(newImage);
-      onMainImageChange(file, newImage.id);
+      onMainImageChange(file);
       setError(null);
     },
     [validateFile, localMainImage, setValue, watch, onMainImageChange]

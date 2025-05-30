@@ -177,7 +177,7 @@ export default function ProductEditPage({
       });
 
       if (data.images.main && typeof data.images.main !== "string") {
-        formData.append("main", data.images.main);
+        formData.append("mainImage", data.images.main);
       }
 
       data.images.additional?.forEach((img) => {

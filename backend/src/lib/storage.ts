@@ -6,16 +6,24 @@ export interface StorageResult {
   url: string;
   key: string;
 }
+export interface UploadOptions {
+  folder?: string;
+  fileName?: string;
+}
 
 export const uploadToR2 = async (
   bucket: R2Bucket,
   file: File,
   publicDomain: string,
-  options: { folder?: string } = {}
+  options: UploadOptions = {}
 ): Promise<StorageResult> => {
-  const { folder = "uploads" } = options;
+  const { folder = "uploads", fileName } = options;
   const fileExt = file.name.split(".").pop();
-  const key = `${folder}/${createId()}.${fileExt}`;
+
+  // ファイル名生成ロジック
+  const key = fileName
+    ? `${folder}/${fileName}.${fileExt}`
+    : `${folder}/${createId()}.${fileExt}`;
 
   await bucket.put(key, file, {
     httpMetadata: {
@@ -28,7 +36,6 @@ export const uploadToR2 = async (
     key,
   };
 };
-
 // 簡易版取得関数
 export const getFromR2 = async (
   bucket: R2Bucket,

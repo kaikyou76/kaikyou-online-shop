@@ -44,7 +44,7 @@ export default function AdminCenter() {
         <h1 className="text-2xl font-bold">管理センター</h1>
         <div className="flex space-x-4">
           <Link
-            href="/product/create"
+            href="/products/create"
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
           >
             商品を追加
