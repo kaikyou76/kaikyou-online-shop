@@ -161,18 +161,6 @@ export default function ProductDetail({ params }: { params: { id: string } }) {
           </Link>
         </div>
 
-        {currentUser?.role === "admin" && (
-          <div className="absolute top-4 right-4 z-10">
-            <Link
-              href={`/products/edit/${params.id}`}
-              className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-sm transition-colors"
-            >
-              <PencilIcon className="h-4 w-4" />
-              <span>編集</span>
-            </Link>
-          </div>
-        )}
-
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden relative">
           {currentUser?.role === "admin" && (
             <div className="absolute top-4 right-4 z-10">
