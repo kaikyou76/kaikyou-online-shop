@@ -208,7 +208,7 @@ export default function ProductCreatePage() {
 
       const token = localStorage.getItem("jwtToken");
       if (!token) {
-        router.push("/login?returnUrl=/product/create");
+        router.push("/login?returnUrl=/products/create");
         return;
       }
 
@@ -228,7 +228,7 @@ export default function ProductCreatePage() {
 
       const result = await response.json();
       resetForm();
-      router.push(`/product/${result.id}`);
+      router.push(`/products/${result.id}`);
     } catch (err) {
       console.error("商品登録エラー:", err);
       setError(
