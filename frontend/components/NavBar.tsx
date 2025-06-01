@@ -30,6 +30,7 @@ export const NavBar = () => {
           </li>
 
           {/* 商品管理ボタン（管理者のみ表示） */}
+          {/*
           {currentUser?.role === "admin" && (
             <li>
               <AuthEditButton
@@ -41,6 +42,7 @@ export const NavBar = () => {
               </AuthEditButton>
             </li>
           )}
+          */}
 
           <div className="flex-grow"></div>
 

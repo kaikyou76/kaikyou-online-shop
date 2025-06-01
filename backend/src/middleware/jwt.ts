@@ -35,7 +35,7 @@ const PBKDF2_CONFIG: Record<string, Pbkdf2Config> = {
     keyLen: 32,
   },
   production: {
-    iterations: 600_000,
+    iterations: 100_000,
     hash: "SHA-512",
     saltLen: 32,
     keyLen: 64,
