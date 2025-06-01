@@ -1,4 +1,3 @@
-// frontend/app/products/[id]/page.tsx
 "use client";
 
 import {
@@ -27,6 +26,8 @@ export type Product = {
   stock: number;
   category_id: number | null;
   category_name: string | null;
+  parent_category_id: number | null; // 追加
+  parent_category_name: string | null; // 追加
   createdAt: string;
   images?: {
     main: ProductImage;
@@ -34,6 +35,7 @@ export type Product = {
   };
   rating?: number;
 };
+
 async function getProduct(id: string): Promise<Product | null> {
   try {
     const baseUrl =
@@ -56,23 +58,26 @@ async function getProduct(id: string): Promise<Product | null> {
       return null;
     }
 
-    const { data } = await res.json();
+    const response = await res.json();
 
-    if (!data) return null;
+    if (!response || !response.data) {
+      console.error("Invalid response data:", response);
+      return null;
+    }
 
+    // APIの拡張に合わせてデータを取得
     return {
-      id: data.id,
-      name: data.name,
-      description: data.description,
-      price: data.price,
-      stock: data.stock,
-      category_id: data.category_id,
-      category_name: data.category_name,
-      createdAt: data.createdAt,
-      images: {
-        main: data.images?.main,
-        additional: data.images?.additional || [],
-      },
+      id: response.data.id,
+      name: response.data.name,
+      description: response.data.description,
+      price: response.data.price,
+      stock: response.data.stock,
+      category_id: response.data.category_id,
+      category_name: response.data.category_name,
+      parent_category_id: response.data.parent_category_id || null, // 追加
+      parent_category_name: response.data.parent_category_name || null, // 追加
+      createdAt: response.data.createdAt,
+      images: response.data.images,
     };
   } catch (error) {
     console.error("商品取得エラー:", error);
@@ -93,6 +98,14 @@ export default function ProductDetail({ params }: { params: { id: string } }) {
     };
     fetchProduct();
   }, [params.id]);
+
+  // カテゴリ階層を表示する関数の追加
+  const renderCategoryHierarchy = () => {
+    if (product?.parent_category_name && product?.category_name) {
+      return `${product.parent_category_name} > ${product.category_name}`;
+    }
+    return product?.category_name || "未設定";
+  };
 
   const getPlaceholderImage = (id: number) => {
     const imageIndex = (id % 5) + 1;
@@ -211,9 +224,10 @@ export default function ProductDetail({ params }: { params: { id: string } }) {
             <div className="md:w-1/2 p-6 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  {product.category_name && (
+                  {/* カテゴリ表示を階層表示に変更 */}
+                  {(product.category_name || product.parent_category_name) && (
                     <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-blue-900 dark:text-blue-300">
-                      {product.category_name}
+                      {renderCategoryHierarchy()}
                     </span>
                   )}
                   {product.rating && (
@@ -266,7 +280,8 @@ export default function ProductDetail({ params }: { params: { id: string } }) {
                 仕様
               </h3>
               <ul className="space-y-2 text-gray-600 dark:text-gray-300">
-                <li>• カテゴリー: {product.category_id || "未設定"}</li>
+                {/* カテゴリー表示を階層表示に変更 */}
+                <li>• カテゴリー: {renderCategoryHierarchy()}</li>
                 <li>• 商品ID: {product.id}</li>
                 <li>• 価格: ¥{product.price.toLocaleString()}</li>
                 <li>

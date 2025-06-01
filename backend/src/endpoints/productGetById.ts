@@ -3,7 +3,7 @@ import { Context } from "hono";
 import { Bindings } from "../types/types";
 
 // ======================
-// 型定義 (DB層とAPI層を分離)
+// 型定義 (更新)
 // ======================
 
 /** DBから取得する生の画像型 */
@@ -23,10 +23,12 @@ type DBProduct = {
   stock: number;
   category_id: number | null;
   category_name: string | null;
+  parent_category_id: number | null; // 追加
+  parent_category_name: string | null; // 追加
   created_at: string;
 };
 
-/** APIレスポンス用の画像型 */
+/** APIレスポンス用の画像型 (変更なし) */
 type APIImage = {
   id: number;
   url: string;
@@ -34,7 +36,7 @@ type APIImage = {
   uploaded_at: string;
 };
 
-/** APIレスポンス用の商品型 */
+/** APIレスポンス用の商品型 (更新) */
 type APIProductResponse = {
   success: true;
   data: {
@@ -45,6 +47,8 @@ type APIProductResponse = {
     stock: number;
     category_id: number | null;
     category_name: string | null;
+    parent_category_id: number | null; // 追加
+    parent_category_name: string | null; // 追加
     createdAt: string;
     images: {
       main: APIImage & { is_main: true };
@@ -54,7 +58,7 @@ type APIProductResponse = {
 };
 
 // ======================
-// 変換関数
+// 変換関数 (変更なし)
 // ======================
 
 /** DB画像 → API画像に変換 */
@@ -66,7 +70,7 @@ const convertImage = (dbImage: DBImage): APIImage => ({
 });
 
 // ======================
-// ハンドラー実装
+// ハンドラー実装 (更新)
 // ======================
 
 export const productGetByIdHandler = async (
@@ -75,15 +79,23 @@ export const productGetByIdHandler = async (
   const id = c.req.param("id");
 
   try {
-    // 商品基本情報取得
+    // 商品基本情報取得 (SQL更新)
     const product = await c.env.DB.prepare(
       `
       SELECT 
-        p.id, p.name, p.description, p.price, p.stock,
-        p.category_id, c.name as category_name,
+        p.id, 
+        p.name, 
+        p.description, 
+        p.price, 
+        p.stock,
+        p.category_id, 
+        c.name AS category_name,
+        parent_cat.id AS parent_category_id,  -- 親カテゴリID追加
+        parent_cat.name AS parent_category_name,  -- 親カテゴリ名追加
         p.created_at
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN categories parent_cat ON c.parent_id = parent_cat.id  -- 親カテゴリ結合
       WHERE p.id = ?
       `
     )
@@ -102,7 +114,7 @@ export const productGetByIdHandler = async (
       );
     }
 
-    // 画像情報取得
+    // 画像情報取得 (変更なし)
     const images = await c.env.DB.prepare(
       `
       SELECT 
@@ -118,7 +130,7 @@ export const productGetByIdHandler = async (
       .bind(id)
       .all<DBImage>();
 
-    // メイン画像チェック
+    // メイン画像チェック (変更なし)
     const mainImage = images.results.find((img) => img.is_main === 1);
     if (!mainImage) {
       return c.json(
@@ -136,11 +148,13 @@ export const productGetByIdHandler = async (
       );
     }
 
-    // レスポンス構築
+    // レスポンス構築 (親カテゴリ情報追加)
     const response: APIProductResponse = {
       success: true,
       data: {
         ...product,
+        parent_category_id: product.parent_category_id,
+        parent_category_name: product.parent_category_name,
         createdAt: new Date(product.created_at).toISOString(),
         images: {
           main: {

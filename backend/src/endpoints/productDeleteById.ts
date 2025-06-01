@@ -8,11 +8,15 @@ export const productDeleteByIdHandler = async (
 ): Promise<Response> => {
   const productId = c.req.param("id");
   const db = c.env.DB;
+  const requestId = crypto.randomUUID();
 
   try {
     // 認証チェック (管理者のみ)
     const payload = c.get("jwtPayload");
+    console.log(`[${requestId}] Auth check - Role: ${payload?.role || "none"}`);
+
     if (!payload || payload.role !== "admin") {
+      console.warn(`[${requestId}] Unauthorized/Forbidden access attempt`);
       return c.json(
         {
           error: {
@@ -26,37 +30,78 @@ export const productDeleteByIdHandler = async (
       );
     }
 
-    // 1. 関連画像の取得
+    // 商品存在チェック
+    console.log(`[${requestId}] Checking product existence: ${productId}`);
+    const productCheck = await db
+      .prepare("SELECT id FROM products WHERE id = ?")
+      .bind(productId)
+      .first<{ id: number }>();
+
+    if (!productCheck) {
+      console.warn(`[${requestId}] Product not found: ${productId}`);
+      return c.json(
+        {
+          error: {
+            code: "NOT_FOUND",
+            message: "指定された商品は存在しません",
+          },
+        } satisfies ErrorResponse,
+        404
+      );
+    }
+
+    // 関連画像の取得（削除対象のURLを事前に取得）
+    console.log(`[${requestId}] Fetching images for product: ${productId}`);
     const images = await db
       .prepare("SELECT image_url FROM images WHERE product_id = ?")
       .bind(productId)
       .all<{ image_url: string }>();
 
-    // 2. R2から画像削除
-    if (images.results.length > 0) {
-      await Promise.all(
-        images.results.map((img) =>
-          deleteFromR2(c.env.R2_BUCKET, img.image_url)
-        )
-      );
-    }
+    const imageUrls = images.results?.map((img) => img.image_url) || [];
+    console.log(`[${requestId}] Found ${imageUrls.length} images to delete`);
 
-    // 3. トランザクション実行（修正箇所）
+    // DB削除処理（トランザクション）
+    console.log(`[${requestId}] Starting batch (transaction) for DB deletion`);
     const statements = [
       db.prepare("DELETE FROM images WHERE product_id = ?").bind(productId),
       db.prepare("DELETE FROM products WHERE id = ?").bind(productId),
     ];
 
-    const results = await db.batch(statements);
+    const batchResults = await db.batch(statements);
+    console.log(`[${requestId}] Batch execution completed`);
 
-    // 削除結果チェック
-    if (results.some((result) => !result.success)) {
-      throw new Error("削除処理に失敗しました");
+    // バッチの結果をチェック
+    const hasErrors = batchResults.some((result) => !result.success);
+    if (hasErrors) {
+      console.error(`[${requestId}] DB deletion batch failed`, batchResults);
+      throw new Error("商品削除のデータベース操作に失敗しました");
     }
 
+    // R2画像削除処理（非同期で実行、エラーが発生してもログだけ記録）
+    if (imageUrls.length > 0) {
+      console.log(`[${requestId}] Deleting ${imageUrls.length} images from R2`);
+      try {
+        await Promise.all(
+          imageUrls.map((url) => deleteFromR2(c.env.R2_BUCKET, url))
+        );
+        console.log(`[${requestId}] All images deleted from R2`);
+      } catch (r2Error) {
+        // R2削除エラーは致命的ではないがログに記録
+        console.error(
+          `[${requestId}] Error deleting images from R2, but DB already deleted. Manual cleanup needed for:`,
+          imageUrls,
+          r2Error
+        );
+        // ここではエラーを投げない（DB削除は成功しているため）
+        // クライアントには削除は成功したが、一部画像の削除に失敗したことを通知するか？
+        // 現状は成功とし、ログに記録するだけ。
+      }
+    }
+
+    console.log(`[${requestId}] Product deletion successful: ${productId}`);
     return c.json({ success: true, deletedId: productId }, 200);
   } catch (error) {
-    console.error("[PRODUCT_DELETE_ERROR]", error);
+    console.error(`[${requestId}] [PRODUCT_DELETE_ERROR]`, error);
     return c.json(
       {
         error: {

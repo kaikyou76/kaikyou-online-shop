@@ -1,4 +1,3 @@
-// frontend/app/products/edit/[id]/page.tsx
 "use client";
 
 import { FormProvider, useForm } from "react-hook-form";
@@ -9,6 +8,11 @@ import { redirect, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../../../components/AuthProvider";
 import ProductImageUpload from "../../../../components/ProductImageUpload";
+
+type Category = {
+  id: number;
+  name: string;
+};
 
 type ProductImage = {
   id: number;
@@ -65,7 +69,10 @@ export default function ProductEditPage({
   const [initialData, setInitialData] = useState<{ data: ProductData } | null>(
     null
   );
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [formInitialized, setFormInitialized] = useState(false); // フォーム初期化状態を追跡
+  const [isDeleting, setIsDeleting] = useState(false); // 削除処理中の状態
 
   const baseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8787";
@@ -104,29 +111,50 @@ export default function ProductEditPage({
 
     const fetchData = async () => {
       try {
-        const productRes = await fetch(`${baseUrl}/api/products/${params.id}`);
+        const token = localStorage.getItem("jwtToken");
+        if (!token) {
+          throw new Error("認証トークンがありません");
+        }
+
+        // 商品データとカテゴリデータを並行して取得
+        const [productRes, categoriesRes] = await Promise.all([
+          fetch(`${baseUrl}/api/products/${params.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${baseUrl}/api/categories`, {
+            method: "GET",
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
         if (!productRes.ok) throw new Error("商品が見つかりません");
         const productData = await productRes.json();
 
-        // カテゴリデータ取得
-        // const categoriesRes = await fetch(`${baseUrl}/api/categories`, {
-        //   method: "GET",
-        //   headers: { Authorization: `Bearer ${token}` },
-        // });
-        //const categoriesData = await categoriesRes.json();
-        // setCategories(categoriesData);
-        // keepImageIdsに既存の追加画像IDを設定
+        if (!categoriesRes.ok) {
+          console.error("カテゴリ取得エラー:", categoriesRes.status);
+          setCategories([]);
+        } else {
+          const categoriesData = await categoriesRes.json();
+          setCategories(categoriesData.data || []);
+        }
 
         const additionalImageIds =
           productData.data.images.additional?.map(
             (img: ProductImage) => img.id
           ) ?? [];
+
+        // カテゴリIDを数値として取得（APIからnullまたは数値が返る）
+        const categoryId = productData.data.category_id
+          ? Number(productData.data.category_id)
+          : null;
+
+        // フォームのリセット（商品データ取得後に実行）
         reset({
           name: productData.data.name,
           description: productData.data.description || "",
           price: productData.data.price,
           stock: productData.data.stock,
-          category_id: productData.data.category_id || null,
+          category_id: categoryId, // 数値型でセット
           images: {
             main: productData.data.images.main?.url || undefined,
             additional:
@@ -141,7 +169,9 @@ export default function ProductEditPage({
             deletedImageIds: [],
           },
         });
+
         setInitialData(productData);
+        setFormInitialized(true); // フォーム初期化完了
       } catch (error) {
         console.error("データ取得エラー:", error);
       } finally {
@@ -151,6 +181,50 @@ export default function ProductEditPage({
     fetchData();
   }, [params.id, reset, authLoading]);
 
+  const handleDelete = async () => {
+    if (
+      !confirm("この商品を削除しますか？関連する画像ファイルも削除されます。")
+    ) {
+      return;
+    }
+
+    if (!isLoggedIn || currentUser?.role !== "admin") {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const token = localStorage.getItem("jwtToken");
+      if (!token) {
+        throw new Error("認証トークンがありません");
+      }
+
+      const res = await fetch(`${baseUrl}/api/products/${params.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error?.message || "削除に失敗しました");
+      }
+
+      alert("商品を削除しました");
+      router.push("/products"); // 商品一覧ページへリダイレクト
+    } catch (error) {
+      console.error("削除エラー:", error);
+      let errorMessage = "商品の削除に失敗しました";
+      if (error instanceof Error) {
+        errorMessage += `: ${error.message}`;
+      }
+      alert(errorMessage);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const onSubmit = async (data: ProductFormValues) => {
     if (!isLoggedIn || currentUser?.role !== "admin") {
       redirect("/");
@@ -158,14 +232,23 @@ export default function ProductEditPage({
     }
 
     try {
+      // メイン画像の必須チェック
+      if (data.images.main === null || data.images.main === undefined) {
+        alert("メイン画像を選択してください");
+        return;
+      }
+
       const formData = new FormData();
       formData.append("name", data.name);
       formData.append("description", data.description || "");
       formData.append("price", data.price.toString());
       formData.append("stock", data.stock.toString());
 
-      if (data.category_id) {
+      // カテゴリIDを確実に送信 (nullでも送信)
+      if (data.category_id !== null && data.category_id !== undefined) {
         formData.append("category_id", data.category_id.toString());
+      } else {
+        formData.append("category_id", ""); // 空文字を送信
       }
 
       data.images.keepImageIds.forEach((id) => {
@@ -176,7 +259,10 @@ export default function ProductEditPage({
         formData.append("deleteImageIds", id.toString());
       });
 
-      if (data.images.main && typeof data.images.main !== "string") {
+      // メイン画像処理
+      if (typeof data.images.main === "string") {
+        formData.append("mainImage", data.images.main);
+      } else {
         formData.append("mainImage", data.images.main);
       }
 
@@ -187,7 +273,16 @@ export default function ProductEditPage({
       });
 
       const token = localStorage.getItem("jwtToken");
-      if (!token) throw new Error("認証トークンがありません");
+      if (!token) {
+        throw new Error("認証トークンがありません");
+      }
+
+      // デバッグ用ログ: 送信されるカテゴリIDを確認
+      console.log(`[${traceId}] 🌟 送信カテゴリID:`, data.category_id);
+      console.log(`[${traceId}] 🌟 送信FormData内容:`);
+      for (const [key, value] of formData.entries()) {
+        console.log(key, value);
+      }
 
       const res = await fetch(`${baseUrl}/api/products/edit/${params.id}`, {
         method: "PUT",
@@ -195,15 +290,36 @@ export default function ProductEditPage({
         body: formData,
       });
 
-      if (!res.ok) throw new Error("更新に失敗しました");
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error(`[${traceId}] ❌ APIエラー応答:`, errorData);
+        throw new Error(errorData.error?.message || "更新に失敗しました");
+      }
+
+      const result = await res.json();
+      console.log(`[${traceId}] ✅ 商品更新成功:`, result);
       router.push(`/products/${params.id}`);
     } catch (error) {
-      console.error("更新エラー:", error);
-      alert("商品の更新に失敗しました");
+      console.error(`[${traceId}] ❌ 更新エラー:`, error);
+
+      let errorMessage = "商品の更新に失敗しました";
+      if (error instanceof Error) {
+        errorMessage += `: ${error.message}`;
+      } else if (typeof error === "string") {
+        errorMessage += `: ${error}`;
+      }
+
+      alert(errorMessage);
     }
   };
 
-  if (authLoading || loading)
+  // 現在のカテゴリIDを取得（デバッグ用）
+  const currentCategoryId = watch("category_id");
+  useEffect(() => {
+    console.log(`[${traceId}] 🚦 現在のカテゴリID:`, currentCategoryId);
+  }, [currentCategoryId, traceId]);
+
+  if (authLoading || loading || !formInitialized)
     return <div className="text-center py-8">読み込み中...</div>;
   if (!isLoggedIn)
     return <div className="text-center py-8">ログインが必要です</div>;
@@ -243,18 +359,27 @@ export default function ProductEditPage({
               )}
             </div>
 
-            {/* カテゴリ */}
-            {/* {...register("category_id")} 将来でelectの下に追加*/}
+            {/* カテゴリ - 修正箇所 */}
             <div className="space-y-2">
               <label className="block font-medium">カテゴリ</label>
-              <select className="w-full p-2 border rounded">
-                <option value="">選択してください</option>
-                {/*categories.map((category) => (
+              <select
+                {...register("category_id", {
+                  setValueAs: (value) => (value === "" ? null : Number(value)),
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="">選択なし</option>
+                {categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
-                ))*/}
+                ))}
               </select>
+              {errors.category_id && (
+                <p className="text-red-500 text-sm">
+                  {errors.category_id.message}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -333,20 +458,33 @@ export default function ProductEditPage({
           />
 
           <div className="flex justify-end space-x-4 pt-4">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="px-4 py-2 border rounded"
-            >
-              キャンセル
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-blue-300"
-            >
-              {isSubmitting ? "保存中..." : "保存"}
-            </button>
+            <div>
+              {/* 削除ボタン（左側に配置） */}
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isSubmitting || isDeleting}
+                className="px-4 py-2 bg-red-500 text-white rounded disabled:bg-red-300"
+              >
+                {isDeleting ? "削除中..." : "商品を削除"}
+              </button>
+            </div>
+            <div className="flex space-x-4">
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="px-4 py-2 border rounded"
+              >
+                キャンセル
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-blue-300"
+              >
+                {isSubmitting ? "保存中..." : "保存"}
+              </button>
+            </div>
           </div>
         </form>
       </FormProvider>
