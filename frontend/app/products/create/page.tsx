@@ -228,7 +228,7 @@ export default function ProductCreatePage() {
 
       const result = await response.json();
       resetForm();
-      router.push(`/products/${result.id}`);
+      router.push(`/products/${result.data.id}`);
     } catch (err) {
       console.error("商品登録エラー:", err);
       setError(
